@@ -1,5 +1,12 @@
-/** Main-thread facade over a small pool of decode workers. */
+/**
+ * Main-thread facade over a small pool of decode workers. The worker is
+ * inlined into the bundle so the app also runs as a single HTML file; if the
+ * host forbids blob workers, decoding falls back to the main thread.
+ */
+import DecodeWorker from '../workers/decode.worker?worker&inline'
 import type { DecodeRequest, DecodeResponse, TrackAudio } from '../workers/decode.worker'
+import { decodeWav } from './wav'
+import { computePeaks, peakAbs } from './peaks'
 
 export type { TrackAudio }
 
@@ -13,14 +20,37 @@ interface Pending {
 }
 
 let workers: Worker[] = []
+let workersUnavailable = false
 let next = 0
 let seq = 0
 const pending = new Map<string, Pending>()
 
-function pool(): Worker[] {
+async function decodeOnMainThread(file: File, buckets: number): Promise<TrackAudio> {
+  const wav = decodeWav(await file.arrayBuffer())
+  return {
+    sampleRate: wav.sampleRate,
+    bitDepth: wav.bitDepth,
+    format: wav.format,
+    length: wav.length,
+    channels: wav.channels,
+    peaks: wav.channels.map((c) => computePeaks(c, buckets)),
+    peak: wav.channels.reduce((m, c) => Math.max(m, peakAbs(c)), 0),
+  }
+}
+
+function pool(): Worker[] | null {
+  if (workersUnavailable) return null
   if (workers.length === 0) {
     for (let i = 0; i < POOL_SIZE; i++) {
-      const w = new Worker(new URL('../workers/decode.worker.ts', import.meta.url), { type: 'module' })
+      let w: Worker
+      try {
+        w = new DecodeWorker()
+      } catch {
+        workersUnavailable = true
+        for (const existing of workers) existing.terminate()
+        workers = []
+        return null
+      }
       w.onmessage = (e: MessageEvent<DecodeResponse>) => {
         const p = pending.get(e.data.id)
         if (!p) return
@@ -46,8 +76,9 @@ function pool(): Worker[] {
 }
 
 export function decodeFile(file: File, buckets = PEAK_BUCKETS): Promise<TrackAudio> {
-  const id = `d${++seq}`
   const ws = pool()
+  if (!ws) return decodeOnMainThread(file, buckets)
+  const id = `d${++seq}`
   const w = ws[next++ % ws.length]
   return new Promise<TrackAudio>((resolve, reject) => {
     pending.set(id, { resolve, reject })
