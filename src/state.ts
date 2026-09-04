@@ -42,6 +42,7 @@ export interface Project {
   variant: Variant
   masterDb: number
   mixerOpen: boolean
+  loop: boolean
 }
 
 export type Action =
@@ -63,6 +64,7 @@ export type Action =
   | { type: 'set-pan'; id: string; pan: number | null }
   | { type: 'set-master'; masterDb: number }
   | { type: 'toggle-mixer' }
+  | { type: 'toggle-loop' }
   | { type: 'reset-mixer' }
   | { type: 'close' }
 
@@ -132,6 +134,7 @@ export function reducer(state: Project | null, action: Action): Project | null {
         variant: 'raw',
         masterDb: 0,
         mixerOpen: false,
+        loop: true,
         tracks: action.files.map((f, i) => ({
           id: action.ids[i],
           name: f.file.name,
@@ -224,6 +227,8 @@ export function reducer(state: Project | null, action: Action): Project | null {
       return { ...state, masterDb: action.masterDb }
     case 'toggle-mixer':
       return { ...state, mixerOpen: !state.mixerOpen }
+    case 'toggle-loop':
+      return { ...state, loop: !state.loop }
     case 'reset-mixer':
       return {
         ...state,

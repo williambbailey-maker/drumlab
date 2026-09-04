@@ -22,6 +22,8 @@ interface Props {
   onVariant: (v: Variant) => void
   mixerOpen: boolean
   onToggleMixer: () => void
+  loop: boolean
+  onToggleLoop: () => void
   exportStatus: string | null
   exporting: boolean
   onExport: () => void
@@ -44,6 +46,8 @@ export function Transport({
   onVariant,
   mixerOpen,
   onToggleMixer,
+  loop,
+  onToggleLoop,
   exportStatus,
   exporting,
   onExport,
@@ -71,6 +75,11 @@ export function Transport({
         onToggleMixer()
         return
       }
+      if (e.code === 'KeyL') {
+        e.preventDefault()
+        onToggleLoop()
+        return
+      }
       // Space and Home on a focused button belong to the button.
       if (tag === 'BUTTON') return
       if (e.code === 'Space') {
@@ -83,7 +92,7 @@ export function Transport({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onToggle, onStop, onVariant, variant, hasFixes, onToggleMixer])
+  }, [onToggle, onStop, onVariant, variant, hasFixes, onToggleMixer, onToggleLoop])
 
   const applied = findings.filter((f) => f.fix && f.applied).length
   const bypassed = findings.filter((f) => f.fix && !f.applied).length
@@ -140,6 +149,23 @@ export function Transport({
       >
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
           <rect x="0.5" y="0.5" width="9" height="9" fill="currentColor" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={onToggleLoop}
+        aria-pressed={loop}
+        aria-label={loop ? 'Loop on' : 'Loop off'}
+        title="Loop the take (L)"
+        className={`flex h-8 w-8 items-center justify-center rounded-full border ${
+          loop ? 'border-ink bg-ink text-paper' : 'border-rule text-ink-soft hover:border-ink-soft hover:text-ink'
+        }`}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M3 5.5h6.5a2 2 0 0 1 0 4H8" />
+          <path d="M11 8.5H4.5a2 2 0 0 1 0-4H6" />
+          <path d="M7 7.5l1.5 1-1.5 1" />
+          <path d="M7 5.5L5.5 4.5 7 3.5" />
         </svg>
       </button>
       <div className="font-mono text-sm tabular-nums text-ink">
@@ -213,7 +239,7 @@ export function Transport({
         mixer
       </button>
       <div className="hidden font-mono text-[11px] text-muted 2xl:block">
-        space play · home stop · a raw/fixed · m mixer
+        space play · home stop · l loop · a raw/fixed · m mixer
       </div>
     </footer>
   )

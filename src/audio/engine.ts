@@ -51,6 +51,7 @@ export class PlaybackEngine {
   private lanes = new Map<string, Lane>()
   private mixState = new Map<string, MixState>()
   private variant: Variant = 'raw'
+  private _loop = true
   private t0 = 0
   private offset = 0
   private _playing = false
@@ -73,10 +74,30 @@ export class PlaybackEngine {
     return d
   }
 
+  get loop(): boolean {
+    return this._loop
+  }
+
   get position(): number {
     if (!this._playing || !this.ctx) return this.offset
     const elapsed = Math.max(0, this.ctx.currentTime - this.t0)
-    return Math.min(this.duration, this.offset + elapsed)
+    const d = this.duration
+    if (this._loop && d > 0) return (this.offset + elapsed) % d
+    return Math.min(d, this.offset + elapsed)
+  }
+
+  /** Loop the whole take. Switching mid-playback takes effect on the current pass. */
+  setLoop(on: boolean): void {
+    if (this._loop === on) return
+    this._loop = on
+    for (const lane of this.lanes.values()) {
+      for (const src of [lane.rawSource, lane.fixedSource]) {
+        if (!src) continue
+        src.loop = on
+        src.loopStart = 0
+        src.loopEnd = src.buffer?.duration ?? 0
+      }
+    }
   }
 
   private ensure(): AudioContext {
@@ -88,21 +109,27 @@ export class PlaybackEngine {
     return this.ctx
   }
 
-  private makeBuffer(channels: Float32Array[], sampleRate: number): AudioBuffer | null {
-    const frames = channels[0]?.length ?? 0
-    if (frames === 0) return null
+  /** Buffers are padded to `frames` so every lane loops at the same point. */
+  private makeBuffer(channels: Float32Array[], sampleRate: number, frames: number): AudioBuffer | null {
+    if (frames === 0 || channels.length === 0) return null
     const buffer = this.ensure().createBuffer(channels.length, frames, sampleRate)
-    channels.forEach((c, i) => buffer.copyToChannel(c as Float32Array<ArrayBuffer>, i))
+    channels.forEach((c, i) => buffer.copyToChannel(c.subarray(0, Math.min(c.length, frames)) as Float32Array<ArrayBuffer>, i))
     return buffer
   }
+
+  private frames = 0
 
   /** Replace the set of playable tracks. Existing lanes are kept; new or changed material joins mid-playback in sync. */
   setTracks(tracks: EngineTrack[]): void {
     if (tracks.length === 0 && this.lanes.size === 0) return
     const ctx = this.ensure()
     const keep = new Set(tracks.map((t) => t.id))
+    // Common length in frames at each track's own rate: use the longest duration in seconds.
+    const longestSec = tracks.reduce((m, t) => Math.max(m, (t.raw[0]?.length ?? 0) / t.sampleRate), 0)
+    const grew = longestSec > this.frames
+    this.frames = longestSec
     for (const [id, lane] of this.lanes) {
-      if (keep.has(id)) continue
+      if (keep.has(id) && !grew) continue
       this.stopLane(lane)
       lane.panner.disconnect()
       this.lanes.delete(id)
@@ -115,7 +142,8 @@ export class PlaybackEngine {
         if (key !== existing.fixedKey) this.replaceFixed(existing, t)
         continue
       }
-      const raw = this.makeBuffer(t.raw, t.sampleRate)
+      const frames = Math.round(longestSec * t.sampleRate)
+      const raw = this.makeBuffer(t.raw, t.sampleRate, frames)
       if (!raw) continue
       const rawGain = ctx.createGain()
       const fixedGain = ctx.createGain()
@@ -154,7 +182,7 @@ export class PlaybackEngine {
       this.stopSource(lane.fixedSource)
       lane.fixedSource = null
     }
-    lane.fixed = t.fixed ? this.makeBuffer(t.fixed, t.sampleRate) : null
+    lane.fixed = t.fixed ? this.makeBuffer(t.fixed, t.sampleRate, lane.raw.length) : null
     lane.fixedKey = t.fixed?.[0] ?? null
     if (lane.fixed) lane.duration = Math.max(lane.raw.duration, lane.fixed.duration)
     if (this._playing && lane.fixed && this.ctx) {
@@ -248,6 +276,9 @@ export class PlaybackEngine {
     if (offset >= buffer.duration) return null
     const src = ctx.createBufferSource()
     src.buffer = buffer
+    src.loop = this._loop
+    src.loopStart = 0
+    src.loopEnd = buffer.duration
     src.connect(dest)
     if (watchEnd) {
       const gen = this.gen

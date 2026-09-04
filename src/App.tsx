@@ -303,6 +303,11 @@ export default function App() {
   const onPan = useCallback((id: string, pan: number | null) => dispatch({ type: 'set-pan', id, pan }), [])
   const onMaster = useCallback((db: number) => dispatch({ type: 'set-master', masterDb: db }), [])
   const onToggleMixer = useCallback(() => dispatch({ type: 'toggle-mixer' }), [])
+  const onToggleLoop = useCallback(() => dispatch({ type: 'toggle-loop' }), [])
+  const loop = project?.loop ?? true
+  useEffect(() => {
+    engine.setLoop(loop)
+  }, [engine, loop])
   const onResetMixer = useCallback(() => dispatch({ type: 'reset-mixer' }), [])
 
   const close = () => {
@@ -411,6 +416,8 @@ export default function App() {
             onVariant={onVariant}
             mixerOpen={project.mixerOpen}
             onToggleMixer={onToggleMixer}
+            loop={project.loop}
+            onToggleLoop={onToggleLoop}
             exportStatus={exportStatus}
             exporting={exporting}
             onExport={onExport}
