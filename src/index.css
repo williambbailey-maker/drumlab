@@ -35,6 +35,21 @@ body {
   font-variation-settings: "opsz" 72;
 }
 
+/* Full-page photo behind the app. The image lives in public/bg.jpg; the
+   overlay keeps type legible and pulls the photo toward the paper palette. */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(243, 238, 229, 0.42), rgba(243, 238, 229, 0.42)),
+    url("/bg.jpg");
+  background-size: cover;
+  background-position: center 30%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
 select.role-picker {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c554c' stroke-width='1.5'/%3E%3C/svg%3E");

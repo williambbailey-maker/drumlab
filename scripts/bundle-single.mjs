@@ -9,7 +9,16 @@ const out = resolve(process.argv[2] ?? 'dist/drum-lab.single.html')
 const html = readFileSync(resolve(dist, 'index.html'), 'utf8')
 
 const asset = (href) => readFileSync(resolve(dist, href.replace(/^\//, '')), 'utf8')
-const css = [...html.matchAll(/<link rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g)].map((m) => asset(m[1])).join('\n')
+const inlineUrls = (text) =>
+  text.replace(/url\((["']?)\/([^"')]+\.(?:jpg|jpeg|png|webp|svg))\1\)/g, (match, _q, file) => {
+    const path = resolve(dist, file)
+    if (!existsSync(path)) return match
+    const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml' }[file.split('.').pop()]
+    return `url("data:${mime};base64,${readFileSync(path).toString('base64')}")`
+  })
+const css = inlineUrls(
+  [...html.matchAll(/<link rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g)].map((m) => asset(m[1])).join('\n'),
+)
 const js = [...html.matchAll(/<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/g)]
   .map((m) => asset(m[1]).replaceAll('</script', '<\\/script'))
   .join('\n')

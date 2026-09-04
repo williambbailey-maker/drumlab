@@ -23,8 +23,8 @@ export function DropZone({ onOpen, dragging, kit, onKit }: Props) {
   return (
     <section className="flex flex-1 items-center justify-center px-8 py-16">
       <div
-        className={`w-full max-w-2xl rounded-2xl border border-dashed px-10 py-16 text-center transition-colors ${
-          dragging ? 'border-rust bg-surface' : 'border-rule bg-transparent'
+        className={`w-full max-w-2xl rounded-2xl border border-dashed bg-surface/95 px-10 py-16 text-center shadow-[0_24px_60px_-20px_rgba(33,29,24,0.45)] backdrop-blur-sm transition-colors ${
+          dragging ? 'border-rust' : 'border-rule'
         }`}
       >
         <h2 className="font-display text-3xl font-medium tracking-tight text-ink">Drop a folder of drum stems</h2>

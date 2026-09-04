@@ -141,7 +141,8 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col" {...handlers}>
-      <header className="flex items-baseline gap-5 border-b border-rule px-8 py-4">
+      <div className="app-bg" aria-hidden />
+      <header className="flex items-baseline gap-5 border-b border-rule bg-paper/80 px-8 py-4 backdrop-blur-sm">
         <h1 className="font-display text-5xl font-medium leading-none tracking-tight">drum lab</h1>
         {project && (
           <>
@@ -162,12 +163,13 @@ export default function App() {
       <main className="flex flex-1 flex-col">
         {project ? (
           tracks.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center p-16 text-center">
+            <div className="flex flex-1 items-center justify-center bg-paper/80 p-16 text-center">
               <p className="font-display text-xl text-ink-soft">
                 No WAV files in <span className="italic">{project.name}</span>. Drop another folder.
               </p>
             </div>
           ) : (
+            <div className="bg-paper/92">
             <TrackList
               project={project}
               engine={engine}
@@ -179,6 +181,7 @@ export default function App() {
               onSolo={onSolo}
               onSeek={seek}
             />
+            </div>
           )
         ) : (
           <DropZone onOpen={open} dragging={dragging} kit={kit} onKit={chooseKit} />
