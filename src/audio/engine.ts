@@ -159,7 +159,14 @@ export class PlaybackEngine {
     if (lane.fixed) lane.duration = Math.max(lane.raw.duration, lane.fixed.duration)
     if (this._playing && lane.fixed && this.ctx) {
       const now = this.ctx.currentTime
-      lane.fixedSource = this.startSource(lane, lane.fixed, lane.fixedGain, now, this.offset + Math.max(0, now - this.t0), false)
+      lane.fixedSource = this.startSource(
+        lane,
+        lane.fixed,
+        lane.fixedGain,
+        now,
+        this.offset + Math.max(0, now - this.t0),
+        false,
+      )
     }
     this.applyVariantGains(lane)
   }

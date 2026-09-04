@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { NO_KIT, SEPTEMBER_2026_KIT, delayMs, expectedLeadsMs, inputNumberFromName, kitById, roleForInput } from './profile'
+import {
+  NO_KIT,
+  SEPTEMBER_2026_KIT,
+  delayMs,
+  expectedLeadsMs,
+  inputNumberFromName,
+  kitById,
+  roleForInput,
+} from './profile'
 
 describe('inputNumberFromName', () => {
   it('reads generic DAW track names', () => {

@@ -6,7 +6,9 @@ export interface AnalysisRequest {
   input: AnalysisInput
 }
 
-export type AnalysisResponse = { seq: number; ok: true; result: AnalysisResult } | { seq: number; ok: false; error: string }
+export type AnalysisResponse =
+  | { seq: number; ok: true; result: AnalysisResult }
+  | { seq: number; ok: false; error: string }
 
 const scope = self as unknown as {
   onmessage: ((e: MessageEvent<AnalysisRequest>) => void) | null

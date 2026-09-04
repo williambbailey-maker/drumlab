@@ -44,21 +44,17 @@ export function TrackList({
 }: Props) {
   const playhead = useRef<HTMLDivElement>(null)
 
-  useAnimationFrame(
-    playing,
-    () => {
-      const el = playhead.current
-      if (!el) return
-      if (duration <= 0) {
-        el.style.display = 'none'
-        return
-      }
-      const frac = Math.max(0, Math.min(1, engine.position / duration))
-      el.style.display = ''
-      el.style.left = waveLeft(frac)
-    },
-    [duration, positionTick],
-  )
+  useAnimationFrame(playing, () => {
+    const el = playhead.current
+    if (!el) return
+    if (duration <= 0) {
+      el.style.display = 'none'
+      return
+    }
+    const frac = Math.max(0, Math.min(1, engine.position / duration))
+    el.style.display = ''
+    el.style.left = waveLeft(frac)
+  }, [duration, positionTick])
 
   const seekFraction = useCallback((f: number) => onSeek(f * duration), [onSeek, duration])
 
@@ -95,7 +91,10 @@ export function TrackList({
             <div
               aria-hidden
               className="pointer-events-none absolute top-0 h-20 border-x border-rust/40 bg-rust/[0.06]"
-              style={{ left: waveLeft(region.start / duration), width: waveWidth((region.end - region.start) / duration) }}
+              style={{
+                left: waveLeft(region.start / duration),
+                width: waveWidth((region.end - region.start) / duration),
+              }}
             />
           )}
           {trimFrac && (

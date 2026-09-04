@@ -34,8 +34,12 @@ export function RolePicker({ value, inUse, source, duplicate, onChange }: Props)
         />
       )}
       {source === 'kit' && <span className="font-display text-xs italic text-moss">from kit</span>}
-      {source === 'guessed' && value !== 'other' && <span className="font-display text-xs italic text-muted">guessed</span>}
-      {source === 'guessed' && value === 'other' && <span className="font-display text-xs italic text-rust">unrecognised</span>}
+      {source === 'guessed' && value !== 'other' && (
+        <span className="font-display text-xs italic text-muted">guessed</span>
+      )}
+      {source === 'guessed' && value === 'other' && (
+        <span className="font-display text-xs italic text-rust">unrecognised</span>
+      )}
     </div>
   )
 }

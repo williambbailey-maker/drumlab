@@ -13,7 +13,9 @@ const inlineUrls = (text) =>
   text.replace(/url\((["']?)\/([^"')]+\.(?:jpg|jpeg|png|webp|svg))\1\)/g, (match, _q, file) => {
     const path = resolve(dist, file)
     if (!existsSync(path)) return match
-    const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml' }[file.split('.').pop()]
+    const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml' }[
+      file.split('.').pop()
+    ]
     return `url("data:${mime};base64,${readFileSync(path).toString('base64')}")`
   })
 const css = inlineUrls(

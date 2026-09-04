@@ -19,15 +19,40 @@ function audio(channels: number): TrackAudio {
 }
 
 function open(names: string[], kit = SEPTEMBER_2026_KIT): Project {
-  const p = reducer(null, { type: 'open', name: 'Take', files: names.map(file), ids: names.map((n) => `id-${n}`), skipped: 0, kit })
+  const p = reducer(null, {
+    type: 'open',
+    name: 'Take',
+    files: names.map(file),
+    ids: names.map((n) => `id-${n}`),
+    skipped: 0,
+    kit,
+  })
   if (!p) throw new Error('no project')
   return p
 }
 
 describe('reducer open', () => {
   it('assigns the attic kit roles to the user’s Pro Tools track names', () => {
-    const p = open(['overheads.L.wav', 'overheads.R.wav', 'room.wav', 'kik out.wav', 'hi hat.wav', 'snr b.wav', 'snr t.wav', 'kik in.wav'])
-    expect(p.tracks.map((t) => t.role)).toEqual(['oh_l', 'oh_r', 'room_mono', 'kick_out', 'hat', 'snare_bottom', 'snare_top', 'kick_in'])
+    const p = open([
+      'overheads.L.wav',
+      'overheads.R.wav',
+      'room.wav',
+      'kik out.wav',
+      'hi hat.wav',
+      'snr b.wav',
+      'snr t.wav',
+      'kik in.wav',
+    ])
+    expect(p.tracks.map((t) => t.role)).toEqual([
+      'oh_l',
+      'oh_r',
+      'room_mono',
+      'kick_out',
+      'hat',
+      'snare_bottom',
+      'snare_top',
+      'kick_in',
+    ])
     expect(p.tracks.every((t) => t.roleSource === 'guessed')).toBe(true)
   })
 
@@ -66,7 +91,11 @@ describe('reducer decoded', () => {
   })
 
   it('splits a stereo overhead file into OH L and OH R', () => {
-    const p = reducer(open(['overheads.wav', 'room.wav']), { type: 'decoded', id: 'id-overheads.wav', audio: audio(2) })!
+    const p = reducer(open(['overheads.wav', 'room.wav']), {
+      type: 'decoded',
+      id: 'id-overheads.wav',
+      audio: audio(2),
+    })!
     expect(p.tracks.map((t) => [t.id, t.name, t.role, t.status])).toEqual([
       ['id-overheads.wav:L', 'overheads.wav · L', 'oh_l', 'ready'],
       ['id-overheads.wav:R', 'overheads.wav · R', 'oh_r', 'ready'],

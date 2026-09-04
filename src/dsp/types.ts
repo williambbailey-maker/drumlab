@@ -3,7 +3,16 @@ import type { StemRole } from '../lib/roles'
 /** The fixed pipeline order from CLAUDE.md. Never user-configurable. */
 export type Stage = 'format' | 'dc' | 'polarity' | 'alignment' | 'hum' | 'pair' | 'expansion' | 'trims'
 
-export const STAGE_ORDER: readonly Stage[] = ['format', 'dc', 'polarity', 'alignment', 'hum', 'pair', 'expansion', 'trims']
+export const STAGE_ORDER: readonly Stage[] = [
+  'format',
+  'dc',
+  'polarity',
+  'alignment',
+  'hum',
+  'pair',
+  'expansion',
+  'trims',
+]
 
 export const STAGE_LABEL: Record<Stage, string> = {
   format: 'Format',

@@ -33,7 +33,8 @@ export function Ruler({ duration, region, onSeek, onRegion }: Props) {
     return () => ro.disconnect()
   }, [])
 
-  const step = duration > 0 && width > 0 ? (STEPS.find((s) => (s / duration) * width >= 64) ?? STEPS[STEPS.length - 1]) : 0
+  const step =
+    duration > 0 && width > 0 ? (STEPS.find((s) => (s / duration) * width >= 64) ?? STEPS[STEPS.length - 1]) : 0
   const ticks: number[] = []
   if (step > 0) for (let t = 0; t < duration; t += step) ticks.push(t)
 

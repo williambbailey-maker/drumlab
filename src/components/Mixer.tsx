@@ -16,7 +16,8 @@ const MIN_DB = -60
 const MAX_DB = 12
 
 const fmt = (db: number) => (db <= MIN_DB ? '−∞' : `${db > 0 ? '+' : db < 0 ? '−' : ''}${Math.abs(db).toFixed(1)}`)
-const panLabel = (p: number) => (Math.abs(p) < 0.05 ? 'C' : p < 0 ? `L${Math.round(-p * 100)}` : `R${Math.round(p * 100)}`)
+const panLabel = (p: number) =>
+  Math.abs(p) < 0.05 ? 'C' : p < 0 ? `L${Math.round(-p * 100)}` : `R${Math.round(p * 100)}`
 
 /** Monitor mixer: faders, pans, mute/solo, master. Listening only; the stems are untouched. */
 export function Mixer({ tracks, masterDb, onGain, onPan, onMute, onSolo, onMaster, onReset }: Props) {
@@ -26,7 +27,11 @@ export function Mixer({ tracks, masterDb, onGain, onPan, onMute, onSolo, onMaste
       <div className="mb-3 flex items-baseline gap-4">
         <h2 className="font-display text-lg italic text-ink-soft">mixer</h2>
         <span className="font-mono text-[11px] text-muted">monitor only · double-click a fader or pan to reset it</span>
-        <button type="button" onClick={onReset} className="ml-auto text-xs text-ink-soft underline-offset-4 hover:text-ink hover:underline">
+        <button
+          type="button"
+          onClick={onReset}
+          className="ml-auto text-xs text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+        >
           Reset all
         </button>
       </div>
@@ -78,7 +83,14 @@ export function Mixer({ tracks, masterDb, onGain, onPan, onMute, onSolo, onMaste
           )
         })}
         <div className="mx-1 w-px self-stretch bg-rule" aria-hidden />
-        <Strip title="Master" subtitle="stereo out" gainDb={masterDb} onGain={onMaster} onGainReset={() => onMaster(0)} dimmed={false} />
+        <Strip
+          title="Master"
+          subtitle="stereo out"
+          gainDb={masterDb}
+          onGain={onMaster}
+          onGainReset={() => onMaster(0)}
+          dimmed={false}
+        />
       </div>
     </section>
   )
@@ -102,7 +114,9 @@ function Strip({
   children?: React.ReactNode
 }) {
   return (
-    <div className={`flex w-[84px] shrink-0 flex-col items-center gap-2 rounded-md border border-rule-soft bg-paper/70 px-2 py-3 ${dimmed ? 'opacity-50' : ''}`}>
+    <div
+      className={`flex w-[84px] shrink-0 flex-col items-center gap-2 rounded-md border border-rule-soft bg-paper/70 px-2 py-3 ${dimmed ? 'opacity-50' : ''}`}
+    >
       <div className="w-full truncate text-center text-xs font-medium text-ink" title={subtitle}>
         {title}
       </div>

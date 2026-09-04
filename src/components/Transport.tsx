@@ -22,6 +22,9 @@ interface Props {
   onVariant: (v: Variant) => void
   mixerOpen: boolean
   onToggleMixer: () => void
+  exportStatus: string | null
+  exporting: boolean
+  onExport: () => void
 }
 
 export function Transport({
@@ -41,16 +44,15 @@ export function Transport({
   onVariant,
   mixerOpen,
   onToggleMixer,
+  exportStatus,
+  exporting,
+  onExport,
 }: Props) {
   const timeRef = useRef<HTMLSpanElement>(null)
 
-  useAnimationFrame(
-    playing,
-    () => {
-      if (timeRef.current) timeRef.current.textContent = formatTime(engine.position, 2)
-    },
-    [positionTick],
-  )
+  useAnimationFrame(playing, () => {
+    if (timeRef.current) timeRef.current.textContent = formatTime(engine.position, 2)
+  }, [positionTick])
 
   const hasFixes = findings.some((f) => f.fix)
 
@@ -101,7 +103,13 @@ export function Transport({
         : ''
 
   const analyzeLabel =
-    analysis === 'running' ? 'Analyzing…' : analysis === 'done' ? 'Re-analyze' : analysis === 'stale' ? 'Re-analyze' : 'Analyze'
+    analysis === 'running'
+      ? 'Analyzing…'
+      : analysis === 'done'
+        ? 'Re-analyze'
+        : analysis === 'stale'
+          ? 'Re-analyze'
+          : 'Analyze'
 
   return (
     <footer className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/95 px-8 py-3 backdrop-blur">
@@ -152,7 +160,9 @@ export function Transport({
         onClick={onAnalyze}
         disabled={!ready || !region || analysis === 'running'}
         className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
-          analysis === 'done' ? 'border border-rule text-ink-soft hover:border-ink-soft hover:text-ink' : 'bg-rust text-paper hover:bg-rust/90'
+          analysis === 'done'
+            ? 'border border-rule text-ink-soft hover:border-ink-soft hover:text-ink'
+            : 'bg-rust text-paper hover:bg-rust/90'
         }`}
       >
         {analyzeLabel}
@@ -183,6 +193,17 @@ export function Transport({
 
       <button
         type="button"
+        onClick={onExport}
+        disabled={!(analysis === 'done' || analysis === 'stale') || exporting}
+        title="Write <take>_fixed/ with the applied fixes and sheet.txt"
+        className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:bg-moss/90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {exporting ? 'Exporting…' : 'Export'}
+      </button>
+      {exportStatus && <div className="font-mono text-[11px] text-ink-soft">{exportStatus}</div>}
+
+      <button
+        type="button"
         onClick={onToggleMixer}
         aria-pressed={mixerOpen}
         className={`ml-auto rounded-md border px-3 py-1.5 font-mono text-xs ${
@@ -191,7 +212,9 @@ export function Transport({
       >
         mixer
       </button>
-      <div className="hidden font-mono text-[11px] text-muted 2xl:block">space play · home stop · a raw/fixed · m mixer</div>
+      <div className="hidden font-mono text-[11px] text-muted 2xl:block">
+        space play · home stop · a raw/fixed · m mixer
+      </div>
     </footer>
   )
 }

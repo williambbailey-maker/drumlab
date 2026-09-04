@@ -159,10 +159,21 @@ export function reducer(state: Project | null, action: Action): Project | null {
           tracks: state.tracks.flatMap((t) => (t.id === action.id ? splitStereo(t, action.audio) : [t])),
         }
       }
-      return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, status: 'ready', audio: action.audio, error: undefined })) }
+      return {
+        ...state,
+        tracks: update(state.tracks, action.id, (t) => ({
+          ...t,
+          status: 'ready',
+          audio: action.audio,
+          error: undefined,
+        })),
+      }
     }
     case 'decode-error':
-      return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, status: 'error', error: action.error })) }
+      return {
+        ...state,
+        tracks: update(state.tracks, action.id, (t) => ({ ...t, status: 'error', error: action.error })),
+      }
     case 'set-kit': {
       // Re-guess every role the user has not set by hand, under the new profile.
       const roles = rolesFor(
@@ -189,7 +200,12 @@ export function reducer(state: Project | null, action: Action): Project | null {
     case 'analysis-start':
       return { ...state, analysis: 'running', analysisError: undefined }
     case 'analysis-done':
-      return { ...state, analysis: 'done', findings: action.findings, variant: action.findings.some((f) => f.applied) ? 'fixed' : state.variant }
+      return {
+        ...state,
+        analysis: 'done',
+        findings: action.findings,
+        variant: action.findings.some((f) => f.applied) ? 'fixed' : state.variant,
+      }
     case 'analysis-error':
       return { ...state, analysis: 'error', analysisError: action.error }
     case 'set-applied': {
@@ -209,7 +225,11 @@ export function reducer(state: Project | null, action: Action): Project | null {
     case 'toggle-mixer':
       return { ...state, mixerOpen: !state.mixerOpen }
     case 'reset-mixer':
-      return { ...state, masterDb: 0, tracks: state.tracks.map((t) => ({ ...t, gainDb: 0, pan: null, mute: false, solo: false })) }
+      return {
+        ...state,
+        masterDb: 0,
+        tracks: state.tracks.map((t) => ({ ...t, gainDb: 0, pan: null, mute: false, solo: false })),
+      }
     case 'set-variant':
       return { ...state, variant: action.variant }
     case 'toggle-mute':

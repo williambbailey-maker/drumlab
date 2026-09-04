@@ -10,7 +10,16 @@ import { estimateAlignment, type AlignResult } from './xcorr'
 import { measureHum } from './hum'
 import { notchAll } from './filters'
 import { activeSpan, blockRms, clipping, peak, percentile, rms, toDb } from './levels'
-import { STAGE_ORDER, type AnalysisInput, type AnalysisResult, type AnalysisTrack, type Finding, type Fix, type Region, type Stage } from './types'
+import {
+  STAGE_ORDER,
+  type AnalysisInput,
+  type AnalysisResult,
+  type AnalysisTrack,
+  type Finding,
+  type Fix,
+  type Region,
+  type Stage,
+} from './types'
 
 const DC_THRESHOLD = 0.001 // −60 dBFS
 const CONFIDENT_RHO = 0.2
@@ -334,8 +343,7 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
     const r = compare(ref, w, MAX_LAG_MS)
     const confident = Math.abs(r.rho) >= CONFIDENT_RHO || r.envRho >= 0.3
     const expected = input.expectedLeadMs[t.role]
-    const expectation =
-      expected !== undefined ? ` Kit profile expects about ${fmtMs(-expected)} from mic spacing.` : ''
+    const expectation = expected !== undefined ? ` Kit profile expects about ${fmtMs(-expected)} from mic spacing.` : ''
     if (!confident) {
       push({
         id: `${t.id}:alignment`,
@@ -422,7 +430,14 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
 
   // ---- pair balance -------------------------------------------------------
   const levelDb = (w: Working) => toDb(rms(w.wav, w.start, w.end))
-  const balancePair = (a: AnalysisTrack | undefined, b: AnalysisTrack | undefined, labelA: string, labelB: string, auto: boolean, targetDb: number) => {
+  const balancePair = (
+    a: AnalysisTrack | undefined,
+    b: AnalysisTrack | undefined,
+    labelA: string,
+    labelB: string,
+    auto: boolean,
+    targetDb: number,
+  ) => {
     if (!a || !b) return
     const wa = work.get(a.id)!
     const wb = work.get(b.id)!
@@ -483,7 +498,11 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
     const floor = percentile(dbs, 10)
     const hitsDb = percentile(dbs, 97)
     const crest = hitsDb - floor
-    const bleedProne = w.track.role === 'hat' || w.track.role === 'snare_bottom' || w.track.role === 'kick_out' || isTomRole(w.track.role)
+    const bleedProne =
+      w.track.role === 'hat' ||
+      w.track.role === 'snare_bottom' ||
+      w.track.role === 'kick_out' ||
+      isTomRole(w.track.role)
     if (crest < EXPANSION_CREST_DB && !isOh(w.track) && !w.track.role.startsWith('room')) {
       const thresholdDb = floor + 8
       push({

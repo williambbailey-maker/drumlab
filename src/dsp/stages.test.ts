@@ -89,7 +89,9 @@ describe('hum', () => {
   })
 
   it('surfaces as an off-by-default finding with a notch fix', () => {
-    const tracks = basicTake({ kickIn: add(hits(SR, SECS, 60, 10, 6, 0.7), tone(60, 0.01), tone(120, 0.005), noise(N, 0.002)) })
+    const tracks = basicTake({
+      kickIn: add(hits(SR, SECS, 60, 10, 6, 0.7), tone(60, 0.01), tone(120, 0.005), noise(N, 0.002)),
+    })
     const f = run(tracks).find((x) => x.id === 'ki:hum')!
     expect(f.severity).toBe('warn')
     expect(f.fix).toMatchObject({ kind: 'notch' })
@@ -184,7 +186,13 @@ describe('clipping and trims', () => {
       padded.set(t.samples, SR * 3)
       return { ...t, samples: padded }
     })
-    const input: AnalysisInput = { tracks, region: { start: 0, end: SECS + 6 }, applied: { 'st:trims': true }, expectedLeadMs: {}, mainsHz: 60 }
+    const input: AnalysisInput = {
+      tracks,
+      region: { start: 0, end: SECS + 6 },
+      applied: { 'st:trims': true },
+      expectedLeadMs: {},
+      mainsHz: 60,
+    }
     const fs = analyzeTake(input).findings
     const trims = fs.filter((f) => f.stage === 'trims')
     expect(trims).toHaveLength(tracks.length)

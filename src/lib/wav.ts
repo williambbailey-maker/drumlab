@@ -40,7 +40,12 @@ function fourcc(dv: DataView, offset: number): string {
 }
 
 /** Returns a view over `bytes` with the given element alignment, copying only if misaligned. */
-function aligned(buf: ArrayBuffer, offset: number, byteLength: number, align: number): ArrayBuffer | { buffer: ArrayBuffer; offset: number } {
+function aligned(
+  buf: ArrayBuffer,
+  offset: number,
+  byteLength: number,
+  align: number,
+): ArrayBuffer | { buffer: ArrayBuffer; offset: number } {
   if (offset % align === 0) return { buffer: buf, offset }
   return buf.slice(offset, offset + byteLength)
 }
@@ -167,7 +172,11 @@ export interface EncodeOptions {
 }
 
 /** Encodes de-interleaved channels as a canonical RIFF/WAVE file. */
-export function encodeWav(channels: readonly Float32Array[], sampleRate: number, opts: EncodeOptions = {}): ArrayBuffer {
+export function encodeWav(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+  opts: EncodeOptions = {},
+): ArrayBuffer {
   const float = opts.float ?? false
   const bitDepth = float ? 32 : (opts.bitDepth ?? 24)
   const numChannels = channels.length

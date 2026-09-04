@@ -80,8 +80,7 @@ export async function ingestDataTransfer(dt: DataTransfer): Promise<IngestResult
     const all: IngestFile[] = []
     for (const e of entries) await walk(e, '', all)
     const dirs = entries.filter((e) => e.isDirectory)
-    const name =
-      dirs.length === 1 ? dirs[0].name : entries.length === 1 ? stripExt(entries[0].name) : 'Dropped files'
+    const name = dirs.length === 1 ? dirs[0].name : entries.length === 1 ? stripExt(entries[0].name) : 'Dropped files'
     return finish(name, all)
   }
   return ingestFileList(fallback)

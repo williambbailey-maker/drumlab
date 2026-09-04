@@ -29,8 +29,8 @@ export function DropZone({ onOpen, dragging, kit, onKit }: Props) {
       >
         <h2 className="font-display text-3xl font-medium tracking-tight text-ink">Drop a folder of drum stems</h2>
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-soft">
-          One WAV per mic. Roles are guessed from filenames and can be corrected per track. Nothing is uploaded
-          and the originals are never touched.
+          One WAV per mic. Roles are guessed from filenames and can be corrected per track. Nothing is uploaded and the
+          originals are never touched.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <button
@@ -84,7 +84,14 @@ export function DropZone({ onOpen, dragging, kit, onKit }: Props) {
           {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
           multiple
         />
-        <input ref={filesInput} type="file" className="hidden" accept=".wav,audio/wav,audio/x-wav" multiple onChange={onChange} />
+        <input
+          ref={filesInput}
+          type="file"
+          className="hidden"
+          accept=".wav,audio/wav,audio/x-wav"
+          multiple
+          onChange={onChange}
+        />
       </div>
     </section>
   )

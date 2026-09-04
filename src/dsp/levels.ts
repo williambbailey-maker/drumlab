@@ -40,7 +40,13 @@ export function percentile(values: Float32Array | number[], p: number): number {
  * Counts clipping events: runs of at least `minRun` consecutive samples at or
  * above `level` (absolute). Returns the number of runs and the longest run.
  */
-export function clipping(x: Float32Array, start: number, end: number, level = 0.999, minRun = 3): { runs: number; longest: number } {
+export function clipping(
+  x: Float32Array,
+  start: number,
+  end: number,
+  level = 0.999,
+  minRun = 3,
+): { runs: number; longest: number } {
   let runs = 0
   let longest = 0
   let run = 0
@@ -66,7 +72,11 @@ export function clipping(x: Float32Array, start: number, end: number, level = 0.
  * First and last block whose RMS exceeds `floorDb + marginDb`, in samples from
  * the start of `x`. Returns null if the track never rises above the floor.
  */
-export function activeSpan(x: Float32Array, sampleRate: number, marginDb = 20): { first: number; last: number; floorDb: number } | null {
+export function activeSpan(
+  x: Float32Array,
+  sampleRate: number,
+  marginDb = 20,
+): { first: number; last: number; floorDb: number } | null {
   const block = Math.round(sampleRate * 0.05)
   const blocks = blockRms(x, 0, x.length, block)
   if (blocks.length === 0) return null

@@ -58,15 +58,25 @@ function TrackRowImpl({ track, rolesInUse, duplicate, dimmed, onRole, onMute, on
       </div>
 
       <div className={`relative h-20 min-w-0 text-wave transition-opacity ${dimmed ? 'opacity-30' : ''}`}>
-        {track.status === 'decoding' && (
-          <div className="absolute inset-0 animate-pulse bg-rule-soft/60" aria-hidden />
-        )}
+        {track.status === 'decoding' && <div className="absolute inset-0 animate-pulse bg-rule-soft/60" aria-hidden />}
         <Waveform peaks={peaks} onSeek={onSeek} className="cursor-text" />
       </div>
 
       <div className="flex items-center justify-center gap-1.5">
-        <ToggleButton label="M" title="Mute" active={track.mute} activeClass="bg-ink text-paper border-ink" onClick={() => onMute(track.id)} />
-        <ToggleButton label="S" title="Solo" active={track.solo} activeClass="bg-amber text-ink border-amber" onClick={() => onSolo(track.id)} />
+        <ToggleButton
+          label="M"
+          title="Mute"
+          active={track.mute}
+          activeClass="bg-ink text-paper border-ink"
+          onClick={() => onMute(track.id)}
+        />
+        <ToggleButton
+          label="S"
+          title="Solo"
+          active={track.solo}
+          activeClass="bg-amber text-ink border-amber"
+          onClick={() => onSolo(track.id)}
+        />
       </div>
     </div>
   )

@@ -46,7 +46,13 @@ export function goertzelPower(x: Float32Array, start: number, end: number, freq:
   return (amp * amp) / 2
 }
 
-export function measureHum(x: Float32Array, start: number, end: number, sampleRate: number, mainsHz: 50 | 60 | null): HumResult {
+export function measureHum(
+  x: Float32Array,
+  start: number,
+  end: number,
+  sampleRate: number,
+  mainsHz: 50 | 60 | null,
+): HumResult {
   const block = Math.round(sampleRate * 0.2)
   const blocks = blockRms(x, start, end, block)
   // Digital silence (padding from a DAW export) carries no hum; only rank blocks with signal in them.
@@ -68,7 +74,8 @@ export function measureHum(x: Float32Array, start: number, end: number, sampleRa
         const be = Math.min(end, bs + block)
         if (be - bs < block / 2) continue
         const p = goertzelPower(x, bs, be, f, sampleRate)
-        const side = (goertzelPower(x, bs, be, f * 1.12, sampleRate) + goertzelPower(x, bs, be, f * 0.88, sampleRate)) / 2
+        const side =
+          (goertzelPower(x, bs, be, f * 1.12, sampleRate) + goertzelPower(x, bs, be, f * 0.88, sampleRate)) / 2
         levels.push(p)
         levelDbs.push(toDb(Math.sqrt(p)))
         proms.push(p > 0 && side > 0 ? 10 * Math.log10(p / side) : p > 0 ? 40 : 0)
@@ -78,13 +85,19 @@ export function measureHum(x: Float32Array, start: number, end: number, sampleRa
       const med = (arr: number[]) => sorted(arr)[Math.floor(arr.length / 2)]
       const dbSorted = sorted(levelDbs.filter((d) => d > -Infinity))
       const spreadDb =
-        dbSorted.length >= 4 ? dbSorted[Math.floor(dbSorted.length * 0.75)] - dbSorted[Math.floor(dbSorted.length * 0.25)] : 0
+        dbSorted.length >= 4
+          ? dbSorted[Math.floor(dbSorted.length * 0.75)] - dbSorted[Math.floor(dbSorted.length * 0.25)]
+          : 0
       harmonics.push({ freq: f, levelDb: toDb(Math.sqrt(med(levels))), prominenceDb: med(proms), spreadDb })
     }
     const significant = harmonics.filter((h) => h.prominenceDb >= 8 && h.levelDb > -90 && h.spreadDb <= 6)
     const levelDb = harmonics.reduce((m, h) => Math.max(m, h.levelDb), -Infinity)
     const result: HumResult = { mainsHz: mains, harmonics, levelDb, significant }
-    if (!best || significant.length > best.significant.length || (significant.length === best.significant.length && levelDb > best.levelDb)) {
+    if (
+      !best ||
+      significant.length > best.significant.length ||
+      (significant.length === best.significant.length && levelDb > best.levelDb)
+    ) {
       best = result
     }
   }

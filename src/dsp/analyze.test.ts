@@ -30,7 +30,13 @@ function take(): { tracks: AnalysisTrack[]; parts: Record<string, Float32Array> 
 }
 
 function run(tracks: AnalysisTrack[], applied: Record<string, boolean> = {}) {
-  const input: AnalysisInput = { tracks, region: { start: 0, end: SECS }, applied, expectedLeadMs: { snare_top: 2.1 }, mainsHz: 60 }
+  const input: AnalysisInput = {
+    tracks,
+    region: { start: 0, end: SECS },
+    applied,
+    expectedLeadMs: { snare_top: 2.1 },
+    mainsHz: 60,
+  }
   return analyzeTake(input)
 }
 

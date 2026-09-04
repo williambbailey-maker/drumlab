@@ -195,7 +195,11 @@ export function expectedLeadsMs(profile: KitProfile): Partial<Record<StemRole, n
     if (i.role === 'oh_l' || i.role === 'oh_r' || i.role === 'oh_mono') continue
     const kickSide = i.role === 'kick_in' || i.role === 'kick_out'
     const mic = kickSide ? i.distanceToKickM : (i.distanceToSnareM ?? i.distanceToKickM)
-    const ref = kickSide ? oh.distanceToKickM : (i.distanceToSnareM !== undefined ? oh.distanceToSnareM : oh.distanceToKickM)
+    const ref = kickSide
+      ? oh.distanceToKickM
+      : i.distanceToSnareM !== undefined
+        ? oh.distanceToSnareM
+        : oh.distanceToKickM
     if (mic === undefined || ref === undefined) continue
     out[i.role] = Math.round(delayMs(ref - mic) * 100) / 100
   }

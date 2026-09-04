@@ -39,7 +39,11 @@ export function FindingsRow({ trackId, findings, soloed, onApplied, onSolo }: Pr
               <div className="text-xs leading-snug text-muted">{f.detail}</div>
             </div>
             {f.fix && (
-              <div className="flex shrink-0 overflow-hidden rounded border border-rule font-mono text-[11px]" role="group" aria-label="Apply or bypass">
+              <div
+                className="flex shrink-0 overflow-hidden rounded border border-rule font-mono text-[11px]"
+                role="group"
+                aria-label="Apply or bypass"
+              >
                 <button
                   type="button"
                   onClick={() => onApplied(f.id, true)}
