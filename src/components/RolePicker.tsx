@@ -3,12 +3,12 @@ import { isStemRole, roleLabel, roleOptions, type StemRole } from '../lib/roles'
 interface Props {
   value: StemRole
   inUse: readonly StemRole[]
-  guessed: boolean
+  source: 'guessed' | 'kit' | 'user'
   duplicate: boolean
   onChange: (role: StemRole) => void
 }
 
-export function RolePicker({ value, inUse, guessed, duplicate, onChange }: Props) {
+export function RolePicker({ value, inUse, source, duplicate, onChange }: Props) {
   const options = roleOptions([...inUse, value])
   return (
     <div className="flex items-center gap-2">
@@ -33,8 +33,9 @@ export function RolePicker({ value, inUse, guessed, duplicate, onChange }: Props
           className="inline-block h-2 w-2 rounded-full bg-amber"
         />
       )}
-      {guessed && value !== 'other' && <span className="font-display text-xs italic text-muted">guessed</span>}
-      {guessed && value === 'other' && <span className="font-display text-xs italic text-rust">unrecognised</span>}
+      {source === 'kit' && <span className="font-display text-xs italic text-moss">from kit</span>}
+      {source === 'guessed' && value !== 'other' && <span className="font-display text-xs italic text-muted">guessed</span>}
+      {source === 'guessed' && value === 'other' && <span className="font-display text-xs italic text-rust">unrecognised</span>}
     </div>
   )
 }

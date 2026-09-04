@@ -125,6 +125,9 @@ export default function App() {
         {project && (
           <>
             <span className="font-display text-lg italic text-ink-soft">{project.name}</span>
+            <span className="font-mono text-xs text-moss" title={project.kit.interface}>
+              kit: {project.kit.name}
+            </span>
             <span className={`font-mono text-xs ${rates.size > 1 ? 'text-amber' : 'text-muted'}`}>{summary}</span>
             <button
               type="button"

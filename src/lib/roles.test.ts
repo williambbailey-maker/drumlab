@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assignRoles, guessRole, roleOptions, tokenize } from './roles'
+import { assignRoles, guessRole, roleOptions, tokenize, type StemRole } from './roles'
 
 describe('tokenize', () => {
   it('strips extension, take numbers and leading track numbers', () => {
@@ -57,28 +57,32 @@ describe('guessRole', () => {
   }
 })
 
+const roles = (names: string[], byInput?: (n: string) => StemRole | null) =>
+  assignRoles(names, byInput).map((a) => a.role)
+
 describe('assignRoles', () => {
   it('compacts tom numbers in order of guessed position', () => {
-    expect(assignRoles(['Rack.wav', 'Floor.wav'])).toEqual(['tom_1', 'tom_2'])
-    expect(assignRoles(['Floor.wav', 'Rack.wav'])).toEqual(['tom_2', 'tom_1'])
-    expect(assignRoles(['Tom 1.wav', 'Tom 2.wav', 'Floor 1.wav', 'Floor 2.wav'])).toEqual([
+    expect(roles(['Rack.wav', 'Floor.wav'])).toEqual(['tom_1', 'tom_2'])
+    expect(roles(['Floor.wav', 'Rack.wav'])).toEqual(['tom_2', 'tom_1'])
+    expect(roles(['Tom 1.wav', 'Tom 2.wav', 'Floor 1.wav', 'Floor 2.wav'])).toEqual([
       'tom_1',
       'tom_2',
       'tom_3',
       'tom_4',
     ])
-    expect(assignRoles(['Hi Tom.wav', 'Mid Tom.wav', 'Low Tom.wav'])).toEqual([
-      'tom_1',
-      'tom_2',
-      'tom_3',
-    ])
+    expect(roles(['Hi Tom.wav', 'Mid Tom.wav', 'Low Tom.wav'])).toEqual(['tom_1', 'tom_2', 'tom_3'])
   })
 
   it('leaves non-tom roles alone', () => {
-    expect(assignRoles(['Kick In.wav', 'Tom 3.wav', 'OH L.wav'])).toEqual([
-      'kick_in',
-      'tom_1',
-      'oh_l',
+    expect(roles(['Kick In.wav', 'Tom 3.wav', 'OH L.wav'])).toEqual(['kick_in', 'tom_1', 'oh_l'])
+  })
+
+  it('falls back to the kit mapping only for unrecognised names', () => {
+    const byInput = (n: string) => (n.startsWith('Audio 8') ? 'kick_in' : null)
+    expect(assignRoles(['Audio 8.wav', 'Snare Top.wav', 'Ride.wav'], byInput)).toEqual([
+      { role: 'kick_in', source: 'kit' },
+      { role: 'snare_top', source: 'guessed' },
+      { role: 'other', source: 'guessed' },
     ])
   })
 })

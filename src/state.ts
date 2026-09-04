@@ -1,4 +1,5 @@
 import { assignRoles, type StemRole } from './lib/roles'
+import { DEFAULT_KIT, inputNumberFromName, roleForInput, type KitProfile } from './kit/profile'
 import type { IngestFile } from './lib/ingest'
 import type { TrackAudio } from './lib/decoder'
 
@@ -13,7 +14,7 @@ export interface Track {
   error?: string
   audio?: TrackAudio
   role: StemRole
-  roleSource: 'guessed' | 'user'
+  roleSource: 'guessed' | 'kit' | 'user'
   mute: boolean
   solo: boolean
 }
@@ -22,6 +23,7 @@ export interface Project {
   name: string
   tracks: Track[]
   skipped: number
+  kit: KitProfile
 }
 
 export type Action =
@@ -46,18 +48,27 @@ function update(tracks: Track[], id: string, patch: (t: Track) => Track): Track[
 export function reducer(state: Project | null, action: Action): Project | null {
   switch (action.type) {
     case 'open': {
-      const roles = assignRoles(action.files.map((f) => f.file.name))
+      const kit = DEFAULT_KIT
+      const byInput = (name: string) => {
+        const n = inputNumberFromName(name)
+        return n === null ? null : roleForInput(kit, n)
+      }
+      const roles = assignRoles(
+        action.files.map((f) => f.file.name),
+        byInput,
+      )
       return {
         name: action.name,
         skipped: action.skipped,
+        kit,
         tracks: action.files.map((f, i) => ({
           id: action.ids[i],
           name: f.file.name,
           path: f.path,
           file: f.file,
           status: 'decoding',
-          role: roles[i],
-          roleSource: 'guessed',
+          role: roles[i].role,
+          roleSource: roles[i].source,
           mute: false,
           solo: false,
         })),

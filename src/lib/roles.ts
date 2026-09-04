@@ -182,12 +182,28 @@ export function guessRole(filename: string): StemRole {
 
 const natural = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
+export interface RoleAssignment {
+  role: StemRole
+  source: 'guessed' | 'kit'
+}
+
 /**
  * Guess roles for a whole folder. Toms are re-numbered 1..n in order of their
  * guessed position, so "Rack, Floor" becomes tom_1, tom_2 rather than tom_1, tom_3.
+ * `byInput` lets a kit profile resolve names that are only an input number.
  */
-export function assignRoles(filenames: readonly string[]): StemRole[] {
-  const roles = filenames.map(guessRole)
+export function assignRoles(
+  filenames: readonly string[],
+  byInput?: (filename: string) => StemRole | null,
+): RoleAssignment[] {
+  const sources: RoleAssignment['source'][] = filenames.map(() => 'guessed')
+  const roles = filenames.map((name, i) => {
+    const guessed = guessRole(name)
+    if (guessed !== 'other' || !byInput) return guessed
+    const fromKit = byInput(name)
+    if (fromKit) sources[i] = 'kit'
+    return fromKit ?? guessed
+  })
   const toms = roles
     .map((role, i) => ({ i, key: tomIndex(role) }))
     .filter((x) => x.key > 0)
@@ -195,5 +211,5 @@ export function assignRoles(filenames: readonly string[]): StemRole[] {
   toms.forEach((x, n) => {
     roles[x.i] = `tom_${n + 1}`
   })
-  return roles
+  return roles.map((role, i) => ({ role, source: sources[i] }))
 }

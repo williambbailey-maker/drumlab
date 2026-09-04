@@ -43,7 +43,7 @@ function TrackRowImpl({ track, rolesInUse, duplicate, dimmed, onRole, onMute, on
         <RolePicker
           value={track.role}
           inUse={rolesInUse}
-          guessed={track.roleSource === 'guessed'}
+          source={track.roleSource}
           duplicate={duplicate}
           onChange={(r) => onRole(track.id, r)}
         />
