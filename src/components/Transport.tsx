@@ -104,7 +104,7 @@ export function Transport({
     analysis === 'running' ? 'Analyzing…' : analysis === 'done' ? 'Re-analyze' : analysis === 'stale' ? 'Re-analyze' : 'Analyze'
 
   return (
-    <footer className="sticky bottom-0 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/95 px-8 py-3 backdrop-blur">
+    <footer className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/95 px-8 py-3 backdrop-blur">
       <button
         type="button"
         onClick={onToggle}
@@ -191,7 +191,7 @@ export function Transport({
       >
         mixer
       </button>
-      <div className="font-mono text-[11px] text-muted">space play · home stop · a raw/fixed · m mixer</div>
+      <div className="hidden font-mono text-[11px] text-muted 2xl:block">space play · home stop · a raw/fixed · m mixer</div>
     </footer>
   )
 }

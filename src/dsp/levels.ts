@@ -71,7 +71,7 @@ export function activeSpan(x: Float32Array, sampleRate: number, marginDb = 20): 
   const blocks = blockRms(x, 0, x.length, block)
   if (blocks.length === 0) return null
   const dbs = Array.from(blocks, toDb)
-  const finite = dbs.filter((d) => d > -Infinity)
+  const finite = dbs.filter((d) => d > -100)
   if (finite.length === 0) return null
   const floorDb = percentile(finite, 10)
   const thr = floorDb + marginDb

@@ -22,6 +22,7 @@ const EXPANSION_CREST_DB = 35
 const TRIM_HEAD_SEC = 0.5
 const TRIM_TAIL_SEC = 2
 const TRIM_MIN_SEC = 1
+const SILENCE_DB = -100
 
 const db = (x: number) => (x <= 0 ? -Infinity : 20 * Math.log10(x))
 const fmtDb = (x: number) => (x === -Infinity ? '−∞' : x.toFixed(1).replace('-', '−'))
@@ -476,7 +477,8 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
   for (const w of work.values()) {
     const sr = w.track.sampleRate
     const blocks = blockRms(w.wav, w.start, w.end, Math.round(sr * 0.02))
-    const dbs = Array.from(blocks, toDb).filter((d) => d > -Infinity)
+    // Digital silence (DAW padding, or what a filter leaves of it) is not a floor.
+    const dbs = Array.from(blocks, toDb).filter((d) => d > SILENCE_DB)
     if (dbs.length < 10) continue
     const floor = percentile(dbs, 10)
     const hitsDb = percentile(dbs, 97)
