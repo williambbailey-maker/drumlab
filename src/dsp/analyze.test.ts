@@ -30,7 +30,7 @@ function take(): { tracks: AnalysisTrack[]; parts: Record<string, Float32Array> 
 }
 
 function run(tracks: AnalysisTrack[], applied: Record<string, boolean> = {}) {
-  const input: AnalysisInput = { tracks, region: { start: 0, end: SECS }, applied, expectedLeadMs: { snare_top: 2.1 } }
+  const input: AnalysisInput = { tracks, region: { start: 0, end: SECS }, applied, expectedLeadMs: { snare_top: 2.1 }, mainsHz: 60 }
   return analyzeTake(input)
 }
 
@@ -116,7 +116,7 @@ describe('analyzeTake', () => {
     const { tracks, parts } = take()
     const { findings } = run(tracks)
     const st = tracks.find((t) => t.id === 'st')!
-    const fixed = renderFixed(st.samples, fixesFor(findings, 'st'))
+    const fixed = renderFixed(st.samples, fixesFor(findings, 'st'), SR)
     // After the shift, the snare in the fixed top mic should sit within a few samples of the overhead snare.
     const ohSnare = delayed(parts.snare, 106)
     let best = 0

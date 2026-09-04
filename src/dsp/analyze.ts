@@ -7,12 +7,21 @@
 import { isTomRole, type StemRole } from '../lib/roles'
 import { measureDc, removeDcInPlace } from './dc'
 import { estimateAlignment, type AlignResult } from './xcorr'
-import type { AnalysisInput, AnalysisResult, AnalysisTrack, Finding, Fix, Region, Stage } from './types'
+import { measureHum } from './hum'
+import { notchAll } from './filters'
+import { activeSpan, blockRms, clipping, peak, percentile, rms, toDb } from './levels'
+import { STAGE_ORDER, type AnalysisInput, type AnalysisResult, type AnalysisTrack, type Finding, type Fix, type Region, type Stage } from './types'
 
 const DC_THRESHOLD = 0.001 // −60 dBFS
 const CONFIDENT_RHO = 0.2
 const MAX_LAG_MS = 20
 const ALIGN_MIN_MS = 0.1
+const HUM_LEVEL_DB = -75
+const PAIR_TOLERANCE_DB = 1
+const EXPANSION_CREST_DB = 35
+const TRIM_HEAD_SEC = 0.5
+const TRIM_TAIL_SEC = 2
+const TRIM_MIN_SEC = 1
 
 const db = (x: number) => (x <= 0 ? -Infinity : 20 * Math.log10(x))
 const fmtDb = (x: number) => (x === -Infinity ? '−∞' : x.toFixed(1).replace('-', '−'))
@@ -94,6 +103,57 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
         measure: `${fmtMs(missingMs, 1).replace('+', '')} short`,
         fix: { kind: 'pad', length: longest },
         auto: true,
+      })
+    }
+  }
+
+  for (const t of tracks) {
+    const [s, e] = regionSamples(input.region, t.sampleRate, t.samples.length)
+    const pk = peak(t.samples, s, e)
+    const clip = clipping(t.samples, s, e)
+    if (pk < 0.001) {
+      push({
+        id: `${t.id}:format:level`,
+        trackId: t.id,
+        stage: 'format',
+        severity: 'error',
+        title: 'Track is silent',
+        detail: 'Peaks below −60 dBFS in the region. Check the input, the mute, or the export.',
+        measure: `${fmtDb(toDb(pk))} dBFS`,
+        auto: false,
+      })
+    } else if (clip.runs > 0) {
+      push({
+        id: `${t.id}:format:level`,
+        trackId: t.id,
+        stage: 'format',
+        severity: 'error',
+        title: 'Clipped on the way in',
+        detail: `${clip.runs} run${clip.runs === 1 ? '' : 's'} of flat-topped samples (longest ${clip.longest}). Nothing here can restore that; lower the interface gain next time.`,
+        measure: `${clip.runs} clip${clip.runs === 1 ? '' : 's'} · ${fmtDb(toDb(pk))} dBFS`,
+        auto: false,
+      })
+    } else if (pk > 0.891) {
+      push({
+        id: `${t.id}:format:level`,
+        trackId: t.id,
+        stage: 'format',
+        severity: 'warn',
+        title: 'No headroom',
+        detail: `Peaks at ${fmtDb(toDb(pk))} dBFS. Not clipped, but within 1 dB of full scale; a hotter hit would have been.`,
+        measure: `${fmtDb(toDb(pk))} dBFS`,
+        auto: false,
+      })
+    } else {
+      push({
+        id: `${t.id}:format:level`,
+        trackId: t.id,
+        stage: 'format',
+        severity: 'ok',
+        title: 'Healthy level',
+        detail: `Peaks at ${fmtDb(toDb(pk))} dBFS, no clipping.`,
+        measure: `${fmtDb(toDb(pk))} dBFS`,
+        auto: false,
       })
     }
   }
@@ -228,6 +288,8 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
     refLabel = 'the overhead'
   }
 
+  const isOh = (t: AnalysisTrack) => t.role === 'oh_l' || t.role === 'oh_r' || t.role === 'oh_mono'
+
   if (!ref) {
     for (const t of tracks) {
       push({
@@ -241,37 +303,32 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
         auto: false,
       })
     }
-    return { findings, elapsedMs: now() - t0 }
-  }
-
-  const isOh = (t: AnalysisTrack) => t.role === 'oh_l' || t.role === 'oh_r' || t.role === 'oh_mono'
-  const primaries = tracks.filter((t) => !isOh(t) && isPrimary(t.role))
-  const partners = tracks.filter((t) => !isOh(t) && !isPrimary(t.role))
-
-  const alignResults = new Map<string, AlignResult>()
-  for (const t of primaries) {
-    const w = work.get(t.id)!
-    const r = compare(ref, w, MAX_LAG_MS)
-    polarityFinding(w, ref, r, refLabel, false)
-    alignResults.set(t.id, r)
-  }
-  for (const t of partners) {
-    const w = work.get(t.id)!
-    const partnerRole = PARTNER[t.role]
-    const partner = partnerRole ? byRole(partnerRole) : undefined
-    if (partner) {
-      const wp = work.get(partner.id)!
-      const r = compare(wp, w, 5)
-      polarityFinding(w, wp, r, roleName(partner.role), true)
-    } else {
+  } else {
+    const primaries = tracks.filter((t) => !isOh(t) && isPrimary(t.role))
+    const partners = tracks.filter((t) => !isOh(t) && !isPrimary(t.role))
+    for (const t of primaries) {
+      const w = work.get(t.id)!
       const r = compare(ref, w, MAX_LAG_MS)
       polarityFinding(w, ref, r, refLabel, false)
+    }
+    for (const t of partners) {
+      const w = work.get(t.id)!
+      const partnerRole = PARTNER[t.role]
+      const partner = partnerRole ? byRole(partnerRole) : undefined
+      if (partner) {
+        const wp = work.get(partner.id)!
+        const r = compare(wp, w, 5)
+        polarityFinding(w, wp, r, roleName(partner.role), true)
+      } else {
+        const r = compare(ref, w, MAX_LAG_MS)
+        polarityFinding(w, ref, r, refLabel, false)
+      }
     }
   }
 
   // ---- alignment ----------------------------------------------------------
   for (const t of tracks) {
-    if (isOh(t)) continue
+    if (!ref || isOh(t)) continue
     const w = work.get(t.id)!
     const r = compare(ref, w, MAX_LAG_MS)
     const confident = Math.abs(r.rho) >= CONFIDENT_RHO || r.envRho >= 0.3
@@ -307,7 +364,7 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
       continue
     }
     const earlier = r.lagSamples < 0
-    push({
+    const f = push({
       id: `${t.id}:alignment`,
       trackId: t.id,
       stage: 'alignment',
@@ -319,6 +376,183 @@ export function analyzeTake(input: AnalysisInput): AnalysisResult {
       auto: true,
       referenceId: ref.track.id,
     })
+    if (f.applied) {
+      const d = -r.lagSamples
+      const shifted = new Float32Array(w.wav.length)
+      if (d >= 0) shifted.set(w.wav.subarray(0, Math.max(0, w.wav.length - d)), d)
+      else shifted.set(w.wav.subarray(-d))
+      w.wav = shifted
+    }
+  }
+
+  // ---- hum ----------------------------------------------------------------
+  for (const w of work.values()) {
+    const sr = w.track.sampleRate
+    const hum = measureHum(w.wav, w.start, w.end, sr, input.mainsHz)
+    const sig = hum.significant.filter((h) => h.levelDb > HUM_LEVEL_DB)
+    if (sig.length > 0) {
+      const freqs = sig.map((h) => h.freq)
+      const strongest = sig.reduce((a, b) => (b.levelDb > a.levelDb ? b : a))
+      const f = push({
+        id: `${w.track.id}:hum`,
+        trackId: w.track.id,
+        stage: 'hum',
+        severity: 'warn',
+        title: `${hum.mainsHz} Hz hum`,
+        detail: `Tones at ${freqs.join(', ')} Hz sit ${strongest.prominenceDb.toFixed(0)} dB above the surrounding spectrum in the quiet gaps, strongest at ${strongest.freq} Hz (${fmtDb(strongest.levelDb)} dBFS). Suggested fix: narrow notches at those frequencies. Off by default; try it and listen to the low end.`,
+        measure: `${fmtDb(strongest.levelDb)} dBFS @ ${strongest.freq} Hz`,
+        fix: { kind: 'notch', freqs, q: 30 },
+        auto: false,
+      })
+      if (f.applied) w.wav = notchAll(w.wav, freqs, 30, sr)
+    } else {
+      push({
+        id: `${w.track.id}:hum`,
+        trackId: w.track.id,
+        stage: 'hum',
+        severity: 'ok',
+        title: `No ${hum.mainsHz} Hz hum`,
+        detail: `Nothing at ${hum.mainsHz} Hz or its harmonics stands out in the quiet gaps (strongest ${fmtDb(hum.levelDb)} dBFS).`,
+        measure: `${fmtDb(hum.levelDb)} dBFS`,
+        auto: false,
+      })
+    }
+  }
+
+  // ---- pair balance -------------------------------------------------------
+  const levelDb = (w: Working) => toDb(rms(w.wav, w.start, w.end))
+  const balancePair = (a: AnalysisTrack | undefined, b: AnalysisTrack | undefined, labelA: string, labelB: string, auto: boolean, targetDb: number) => {
+    if (!a || !b) return
+    const wa = work.get(a.id)!
+    const wb = work.get(b.id)!
+    const diff = levelDb(wb) - levelDb(wa) // positive: b louder than a
+    const off = diff - targetDb
+    const id = `${b.id}:pair`
+    if (Math.abs(off) <= PAIR_TOLERANCE_DB) {
+      push({
+        id,
+        trackId: b.id,
+        stage: 'pair',
+        severity: 'ok',
+        title: `${labelB} balanced with ${labelA}`,
+        detail: `${labelB} sits ${fmtDb(diff)} dB relative to ${labelA}${targetDb ? ` (target ${fmtDb(targetDb)} dB)` : ''}.`,
+        measure: `${fmtDb(diff)} dB`,
+        auto: false,
+        referenceId: a.id,
+      })
+      return
+    }
+    const f = push({
+      id,
+      trackId: b.id,
+      stage: 'pair',
+      severity: auto ? 'warn' : 'info',
+      title: auto
+        ? off > 0
+          ? `${labelB} louder than ${labelA}`
+          : `${labelB} quieter than ${labelA}`
+        : off > 0
+          ? `${labelB} hotter than usual against ${labelA}`
+          : `${labelB} lower than usual against ${labelA}`,
+      detail: auto
+        ? `${labelB} reads ${fmtDb(diff)} dB against ${labelA} over the region. Trimmed by ${fmtDb(-off)} dB so the pair sits level.`
+        : `${labelB} reads ${fmtDb(diff)} dB against ${labelA}. A conventional print puts it around ${fmtDb(targetDb)} dB; the suggested trim of ${fmtDb(-off)} dB gets there. Off by default because this is taste, not a fault.`,
+      measure: `${fmtDb(diff)} dB`,
+      fix: { kind: 'gain', db: Math.round(-off * 10) / 10 },
+      auto,
+      referenceId: a.id,
+    })
+    if (f.applied) {
+      const g = Math.pow(10, -off / 20)
+      for (let i = 0; i < wb.wav.length; i++) wb.wav[i] *= g
+    }
+  }
+  balancePair(ohL, ohR, 'OH L', 'OH R', true, 0)
+  balancePair(byRole('room_l'), byRole('room_r'), 'Room L', 'Room R', true, 0)
+  balancePair(byRole('snare_top'), byRole('snare_bottom'), 'snare top', 'Snare bottom', false, -6)
+  balancePair(byRole('kick_in'), byRole('kick_out'), 'kick in', 'Kick out', false, -3)
+
+  // ---- expansion ----------------------------------------------------------
+  for (const w of work.values()) {
+    const sr = w.track.sampleRate
+    const blocks = blockRms(w.wav, w.start, w.end, Math.round(sr * 0.02))
+    const dbs = Array.from(blocks, toDb).filter((d) => d > -Infinity)
+    if (dbs.length < 10) continue
+    const floor = percentile(dbs, 10)
+    const hitsDb = percentile(dbs, 97)
+    const crest = hitsDb - floor
+    const bleedProne = w.track.role === 'hat' || w.track.role === 'snare_bottom' || w.track.role === 'kick_out' || isTomRole(w.track.role)
+    if (crest < EXPANSION_CREST_DB && !isOh(w.track) && !w.track.role.startsWith('room')) {
+      const thresholdDb = floor + 8
+      push({
+        id: `${w.track.id}:expansion`,
+        trackId: w.track.id,
+        stage: 'expansion',
+        severity: bleedProne ? 'warn' : 'info',
+        title: 'Bleed between hits',
+        detail: `Between hits this mic sits at ${fmtDb(floor)} dBFS against hits at ${fmtDb(hitsDb)} dBFS, ${crest.toFixed(0)} dB apart. Suggested fix: a gentle downward expander (threshold ${fmtDb(thresholdDb)} dBFS, 2:1, up to 12 dB). Off by default; it changes the feel of the room in this mic.`,
+        measure: `floor ${fmtDb(floor)} · hits ${fmtDb(hitsDb)} dBFS`,
+        fix: { kind: 'expand', thresholdDb, ratio: 2, rangeDb: 12, attackMs: 2, releaseMs: 120 },
+        auto: false,
+      })
+    } else {
+      push({
+        id: `${w.track.id}:expansion`,
+        trackId: w.track.id,
+        stage: 'expansion',
+        severity: 'ok',
+        title: isOh(w.track) || w.track.role.startsWith('room') ? 'Bleed is the point here' : 'Bleed under control',
+        detail: `Between hits ${fmtDb(floor)} dBFS, hits ${fmtDb(hitsDb)} dBFS (${crest.toFixed(0)} dB apart).`,
+        measure: `floor ${fmtDb(floor)} · hits ${fmtDb(hitsDb)} dBFS`,
+        auto: false,
+      })
+    }
+  }
+
+  // ---- trims (take-wide, same cut on every stem) ------------------------------
+  {
+    let first = Infinity
+    let last = 0
+    const sr = tracks[0].sampleRate
+    for (const t of tracks) {
+      const span = activeSpan(t.samples, t.sampleRate)
+      if (!span) continue
+      first = Math.min(first, span.first)
+      last = Math.max(last, span.last)
+    }
+    if (first !== Infinity) {
+      const start = Math.max(0, first - Math.round(TRIM_HEAD_SEC * sr))
+      const end = Math.min(longest, last + Math.round(TRIM_TAIL_SEC * sr))
+      const headSec = start / sr
+      const tailSec = (longest - end) / sr
+      const worth = headSec >= TRIM_MIN_SEC || tailSec >= TRIM_MIN_SEC
+      for (const t of tracks) {
+        if (worth) {
+          push({
+            id: `${t.id}:trims`,
+            trackId: t.id,
+            stage: 'trims',
+            severity: 'info',
+            title: 'Silence at the ends',
+            detail: `${headSec.toFixed(1)} s before the first hit and ${tailSec.toFixed(1)} s after the last decay. Suggested fix: trim every stem to the same span on export, keeping ${TRIM_HEAD_SEC} s of lead-in and ${TRIM_TAIL_SEC} s of tail. Off by default; applies to all stems together so they stay aligned, and playback here stays full length.`,
+            measure: `head ${headSec.toFixed(1)} s · tail ${tailSec.toFixed(1)} s`,
+            fix: { kind: 'trim', start, end },
+            auto: false,
+          })
+        } else {
+          push({
+            id: `${t.id}:trims`,
+            trackId: t.id,
+            stage: 'trims',
+            severity: 'ok',
+            title: 'Tight ends',
+            detail: `${headSec.toFixed(1)} s before the first hit, ${tailSec.toFixed(1)} s after the last decay.`,
+            measure: `head ${headSec.toFixed(1)} s · tail ${tailSec.toFixed(1)} s`,
+            auto: false,
+          })
+        }
+      }
+    }
   }
 
   return { findings, elapsedMs: now() - t0 }
@@ -332,11 +566,21 @@ function roleName(role: StemRole): string {
   return role.replace('_', ' ')
 }
 
-/** Fixes for one track in pipeline order, applied ones only. */
-export function fixesFor(findings: readonly Finding[], trackId: string): Fix[] {
-  const order: Record<Stage, number> = { format: 0, dc: 1, polarity: 2, alignment: 3 }
+/**
+ * Fixes for one track in pipeline order, applied ones only. Trims are an
+ * export-time cut: pass `{ forPlayback: true }` to leave them out so raw and
+ * fixed stay in lockstep for A/B.
+ */
+export function fixesFor(findings: readonly Finding[], trackId: string, opts: { forPlayback?: boolean } = {}): Fix[] {
+  const order = (s: Stage) => STAGE_ORDER.indexOf(s)
   return findings
-    .filter((f) => f.trackId === trackId && f.fix && f.applied)
-    .sort((a, b) => order[a.stage] - order[b.stage])
+    .filter((f) => f.trackId === trackId && f.fix && f.applied && !(opts.forPlayback && f.stage === 'trims'))
+    .sort((a, b) => order(a.stage) - order(b.stage))
     .map((f) => f.fix!)
+}
+
+/** The applied take-wide trim, if any, in samples. */
+export function appliedTrim(findings: readonly Finding[]): { start: number; end: number } | null {
+  const f = findings.find((x) => x.stage === 'trims' && x.applied && x.fix?.kind === 'trim')
+  return f && f.fix?.kind === 'trim' ? { start: f.fix.start, end: f.fix.end } : null
 }

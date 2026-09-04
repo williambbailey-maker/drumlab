@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { PlaybackEngine, type EngineTrack, type Variant } from './audio/engine'
 import { DropZone } from './components/DropZone'
+import { Mixer } from './components/Mixer'
 import { KitPicker } from './components/KitPicker'
 import { TrackList } from './components/TrackList'
 import { Transport } from './components/Transport'
-import { fixesFor } from './dsp/analyze'
+import { appliedTrim, fixesFor } from './dsp/analyze'
 import { renderFixed } from './dsp/render'
 import type { AnalysisInput, Region } from './dsp/types'
 import { useFileDrop } from './hooks/useFileDrop'
@@ -15,7 +16,7 @@ import { formatRate } from './lib/format'
 import type { IngestResult } from './lib/ingest'
 import { panForRole, type StemRole } from './lib/roles'
 import { kvGet, kvSet } from './lib/store'
-import { defaultRegion, newId, projectDuration, reducer, type Project } from './state'
+import { defaultRegion, newId, overridesAfter, projectDuration, reducer, type Project } from './state'
 
 const KIT_KEY = 'kit-profile-id'
 
@@ -61,6 +62,7 @@ export default function App() {
         region: p.region,
         applied: overrides ?? p.overrides,
         expectedLeadMs: expectedLeadsMs(p.kit),
+        mainsHz: p.kit.mainsHz,
       }
       dispatch({ type: 'analysis-start' })
       analyze(input).then(
@@ -126,9 +128,9 @@ export default function App() {
     const out = new Map<string, Float32Array[]>()
     if (findings.length === 0) return out
     for (const t of ready) {
-      const fixes = fixesFor(findings, t.id)
+      const fixes = fixesFor(findings, t.id, { forPlayback: true })
       if (fixes.length === 0) continue
-      out.set(t.id, [renderFixed(t.audio!.channels[0], fixes)])
+      out.set(t.id, [renderFixed(t.audio!.channels[0], fixes, t.audio!.sampleRate)])
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,11 +150,24 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, laneKey, fixedById])
 
-  const mixKey = tracks.map((t) => `${t.id}:${t.mute ? 1 : 0}${t.solo ? 1 : 0}`).join('|')
+  const mixKey = tracks.map((t) => `${t.id}:${t.mute ? 1 : 0}${t.solo ? 1 : 0}:${t.gainDb}:${t.pan ?? panForRole(t.role)}`).join('|')
   useEffect(() => {
-    engine.setMix(tracks.map((t) => ({ id: t.id, mute: t.mute, solo: t.solo })))
+    engine.setMix(
+      tracks.map((t) => ({
+        id: t.id,
+        mute: t.mute,
+        solo: t.solo,
+        gainDb: t.gainDb <= -60 ? -Infinity : t.gainDb,
+        pan: t.pan ?? panForRole(t.role),
+      })),
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, mixKey])
+
+  const masterDb = project?.masterDb ?? 0
+  useEffect(() => {
+    engine.setMaster(masterDb <= -60 ? -Infinity : masterDb)
+  }, [engine, masterDb])
 
   const variant: Variant = project?.variant ?? 'raw'
   useEffect(() => {
@@ -194,11 +209,16 @@ export default function App() {
       dispatch({ type: 'set-applied', id, applied })
       const p = projectRef.current
       // Re-measure downstream stages with this decision in force.
-      runAnalysis({ ...(p?.overrides ?? {}), [id]: applied })
+      if (p) runAnalysis(overridesAfter(p.overrides, p.findings, id, applied))
     },
     [runAnalysis],
   )
   const onAnalyze = useCallback(() => runAnalysis(), [runAnalysis])
+  const onGain = useCallback((id: string, gainDb: number) => dispatch({ type: 'set-gain', id, gainDb }), [])
+  const onPan = useCallback((id: string, pan: number | null) => dispatch({ type: 'set-pan', id, pan }), [])
+  const onMaster = useCallback((db: number) => dispatch({ type: 'set-master', masterDb: db }), [])
+  const onToggleMixer = useCallback(() => dispatch({ type: 'toggle-mixer' }), [])
+  const onResetMixer = useCallback(() => dispatch({ type: 'reset-mixer' }), [])
 
   const close = () => {
     stop()
@@ -260,6 +280,7 @@ export default function App() {
                 onSeek={seek}
                 onRegion={onRegion}
                 onApplied={onApplied}
+                trim={appliedTrim(findings)}
               />
             </div>
           )
@@ -267,6 +288,21 @@ export default function App() {
           <DropZone onOpen={open} dragging={dragging} kit={kit} onKit={chooseKit} />
         )}
       </main>
+
+      {project && tracks.length > 0 && project.mixerOpen && (
+        <div className="sticky bottom-[58px] z-10">
+          <Mixer
+            tracks={tracks}
+            masterDb={project.masterDb}
+            onGain={onGain}
+            onPan={onPan}
+            onMute={onMute}
+            onSolo={onSolo}
+            onMaster={onMaster}
+            onReset={onResetMixer}
+          />
+        </div>
+      )}
 
       {project && tracks.length > 0 && (
         <Transport
@@ -284,6 +320,8 @@ export default function App() {
           onStop={stop}
           onAnalyze={onAnalyze}
           onVariant={onVariant}
+          mixerOpen={project.mixerOpen}
+          onToggleMixer={onToggleMixer}
         />
       )}
 

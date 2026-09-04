@@ -20,6 +20,8 @@ interface Props {
   onStop: () => void
   onAnalyze: () => void
   onVariant: (v: Variant) => void
+  mixerOpen: boolean
+  onToggleMixer: () => void
 }
 
 export function Transport({
@@ -37,6 +39,8 @@ export function Transport({
   onStop,
   onAnalyze,
   onVariant,
+  mixerOpen,
+  onToggleMixer,
 }: Props) {
   const timeRef = useRef<HTMLSpanElement>(null)
 
@@ -60,6 +64,11 @@ export function Transport({
         onVariant(variant === 'raw' ? 'fixed' : 'raw')
         return
       }
+      if (e.code === 'KeyM') {
+        e.preventDefault()
+        onToggleMixer()
+        return
+      }
       // Space and Home on a focused button belong to the button.
       if (tag === 'BUTTON') return
       if (e.code === 'Space') {
@@ -72,7 +81,7 @@ export function Transport({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onToggle, onStop, onVariant, variant, hasFixes])
+  }, [onToggle, onStop, onVariant, variant, hasFixes, onToggleMixer])
 
   const applied = findings.filter((f) => f.fix && f.applied).length
   const bypassed = findings.filter((f) => f.fix && !f.applied).length
@@ -172,7 +181,17 @@ export function Transport({
 
       {summary && <div className={`font-mono text-[11px] ${attention ? 'text-rust' : 'text-muted'}`}>{summary}</div>}
 
-      <div className="ml-auto font-mono text-[11px] text-muted">space play · home stop · a raw/fixed · drag ruler for region</div>
+      <button
+        type="button"
+        onClick={onToggleMixer}
+        aria-pressed={mixerOpen}
+        className={`ml-auto rounded-md border px-3 py-1.5 font-mono text-xs ${
+          mixerOpen ? 'border-ink bg-ink text-paper' : 'border-rule text-ink-soft hover:border-ink-soft hover:text-ink'
+        }`}
+      >
+        mixer
+      </button>
+      <div className="font-mono text-[11px] text-muted">space play · home stop · a raw/fixed · m mixer</div>
     </footer>
   )
 }

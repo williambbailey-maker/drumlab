@@ -1,15 +1,19 @@
 import type { StemRole } from '../lib/roles'
 
-/** Pipeline stages in this build. Later builds add hum, pair balance, expansion, trims. */
-export type Stage = 'format' | 'dc' | 'polarity' | 'alignment'
+/** The fixed pipeline order from CLAUDE.md. Never user-configurable. */
+export type Stage = 'format' | 'dc' | 'polarity' | 'alignment' | 'hum' | 'pair' | 'expansion' | 'trims'
 
-export const STAGE_ORDER: readonly Stage[] = ['format', 'dc', 'polarity', 'alignment']
+export const STAGE_ORDER: readonly Stage[] = ['format', 'dc', 'polarity', 'alignment', 'hum', 'pair', 'expansion', 'trims']
 
 export const STAGE_LABEL: Record<Stage, string> = {
   format: 'Format',
   dc: 'DC offset',
   polarity: 'Polarity',
   alignment: 'Alignment',
+  hum: 'Hum',
+  pair: 'Pair balance',
+  expansion: 'Expansion',
+  trims: 'Trims',
 }
 
 export type Fix =
@@ -17,6 +21,10 @@ export type Fix =
   | { kind: 'dc'; offset: number }
   | { kind: 'flip' }
   | { kind: 'shift'; samples: number }
+  | { kind: 'notch'; freqs: number[]; q: number }
+  | { kind: 'gain'; db: number }
+  | { kind: 'expand'; thresholdDb: number; ratio: number; rangeDb: number; attackMs: number; releaseMs: number }
+  | { kind: 'trim'; start: number; end: number }
 
 export type Severity = 'ok' | 'info' | 'warn' | 'error'
 
@@ -58,6 +66,8 @@ export interface AnalysisInput {
   applied: Record<string, boolean>
   /** Expected lead of each role relative to the overheads, in ms, from the kit profile. */
   expectedLeadMs: Partial<Record<StemRole, number>>
+  /** Mains frequency to hunt for; null tries both 50 and 60 Hz. */
+  mainsHz: 50 | 60 | null
 }
 
 export interface AnalysisResult {

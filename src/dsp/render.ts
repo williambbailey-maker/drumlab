@@ -1,16 +1,17 @@
+import { expand, gain, notchAll } from './filters'
 import type { Fix } from './types'
 
 /**
  * Applies fixes to a full-length raw signal, in the order given (callers pass
  * them in pipeline order). Never mutates the input.
  */
-export function renderFixed(raw: Float32Array, fixes: readonly Fix[]): Float32Array {
+export function renderFixed(raw: Float32Array, fixes: readonly Fix[], sampleRate: number): Float32Array {
   let out = raw
-  for (const fix of fixes) out = applyFix(out, fix)
+  for (const fix of fixes) out = applyFix(out, fix, sampleRate)
   return out === raw ? new Float32Array(raw) : out
 }
 
-export function applyFix(x: Float32Array, fix: Fix): Float32Array {
+export function applyFix(x: Float32Array, fix: Fix, sampleRate: number): Float32Array {
   switch (fix.kind) {
     case 'pad': {
       if (fix.length === x.length) return x
@@ -35,6 +36,17 @@ export function applyFix(x: Float32Array, fix: Fix): Float32Array {
       if (d >= 0) out.set(x.subarray(0, Math.max(0, x.length - d)), d)
       else out.set(x.subarray(-d))
       return out
+    }
+    case 'notch':
+      return notchAll(x, fix.freqs, fix.q, sampleRate)
+    case 'gain':
+      return gain(x, fix.db)
+    case 'expand':
+      return expand(x, fix, sampleRate)
+    case 'trim': {
+      const s = Math.max(0, Math.min(x.length, fix.start))
+      const e = Math.max(s, Math.min(x.length, fix.end))
+      return x.slice(s, e)
     }
   }
 }

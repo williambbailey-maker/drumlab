@@ -23,6 +23,10 @@ export interface MixState {
   id: string
   mute: boolean
   solo: boolean
+  /** Fader, dB. −Infinity silences. */
+  gainDb: number
+  /** −1..1 */
+  pan: number
 }
 
 interface Lane {
@@ -170,6 +174,11 @@ export class PlaybackEngine {
     this.applyGains()
   }
 
+  setMaster(db: number): void {
+    if (!this.master || !this.ctx) return
+    this.master.gain.setTargetAtTime(dbToGain(db), this.ctx.currentTime, 0.01)
+  }
+
   play(from?: number): void {
     if (this.lanes.size === 0) return
     const ctx = this.ensure()
@@ -289,8 +298,14 @@ export class PlaybackEngine {
     const now = this.ctx.currentTime
     for (const [id, lane] of this.lanes) {
       const m = this.mixState.get(id)
-      const g = !m ? 1 : m.mute ? 0 : anySolo && !m.solo ? 0 : 1
+      const audible = !m ? true : m.mute ? false : !(anySolo && !m.solo)
+      const g = audible ? dbToGain(m?.gainDb ?? 0) : 0
       lane.mix.gain.setTargetAtTime(g, now, 0.008)
+      if (m) lane.panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, m.pan)), now, 0.008)
     }
   }
+}
+
+function dbToGain(db: number): number {
+  return db === -Infinity ? 0 : Math.pow(10, db / 20)
 }

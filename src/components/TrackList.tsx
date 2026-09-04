@@ -21,6 +21,8 @@ interface Props {
   onSeek: (seconds: number) => void
   onRegion: (region: Region) => void
   onApplied: (id: string, applied: boolean) => void
+  /** Applied export trim, in samples of the longest track. */
+  trim: { start: number; end: number } | null
 }
 
 const waveLeft = (frac: number) => `calc(${LABEL_COL}px + ${frac} * (100% - ${LABEL_COL + CONTROL_COL}px))`
@@ -38,6 +40,7 @@ export function TrackList({
   onSeek,
   onRegion,
   onApplied,
+  trim,
 }: Props) {
   const playhead = useRef<HTMLDivElement>(null)
 
@@ -65,6 +68,9 @@ export function TrackList({
   const anySolo = project.tracks.some((t) => t.solo)
   const region = project.region
   const showFindings = project.findings.length > 0
+  const sr = project.tracks.find((t) => t.audio)?.audio?.sampleRate ?? 48000
+  const totalSamples = duration * sr
+  const trimFrac = trim && totalSamples > 0 ? { start: trim.start / totalSamples, end: trim.end / totalSamples } : null
 
   return (
     <div className="relative">
@@ -91,6 +97,22 @@ export function TrackList({
               className="pointer-events-none absolute top-0 h-20 border-x border-rust/40 bg-rust/[0.06]"
               style={{ left: waveLeft(region.start / duration), width: waveWidth((region.end - region.start) / duration) }}
             />
+          )}
+          {trimFrac && (
+            <>
+              <div
+                aria-hidden
+                title="Trimmed on export"
+                className="pointer-events-none absolute top-0 h-20 bg-ink/10"
+                style={{ left: waveLeft(0), width: waveWidth(trimFrac.start) }}
+              />
+              <div
+                aria-hidden
+                title="Trimmed on export"
+                className="pointer-events-none absolute top-0 h-20 bg-ink/10"
+                style={{ left: waveLeft(trimFrac.end), width: waveWidth(1 - trimFrac.end) }}
+              />
+            </>
           )}
           {showFindings && (
             <FindingsRow

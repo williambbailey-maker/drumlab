@@ -19,6 +19,10 @@ export interface Track {
   roleSource: 'guessed' | 'kit' | 'user'
   mute: boolean
   solo: boolean
+  /** Monitor fader, dB. */
+  gainDb: number
+  /** Monitor pan, −1..1; null follows the role's default placement. */
+  pan: number | null
 }
 
 export type AnalysisStatus = 'idle' | 'running' | 'done' | 'stale' | 'error'
@@ -36,6 +40,8 @@ export interface Project {
   /** User Apply/Bypass decisions by finding id; absent means the finding's default. */
   overrides: Record<string, boolean>
   variant: Variant
+  masterDb: number
+  mixerOpen: boolean
 }
 
 export type Action =
@@ -53,6 +59,11 @@ export type Action =
   | { type: 'analysis-error'; error: string }
   | { type: 'set-applied'; id: string; applied: boolean }
   | { type: 'set-variant'; variant: Variant }
+  | { type: 'set-gain'; id: string; gainDb: number }
+  | { type: 'set-pan'; id: string; pan: number | null }
+  | { type: 'set-master'; masterDb: number }
+  | { type: 'toggle-mixer' }
+  | { type: 'reset-mixer' }
   | { type: 'close' }
 
 export function newId(): string {
@@ -119,6 +130,8 @@ export function reducer(state: Project | null, action: Action): Project | null {
         analysis: 'idle',
         overrides: {},
         variant: 'raw',
+        masterDb: 0,
+        mixerOpen: false,
         tracks: action.files.map((f, i) => ({
           id: action.ids[i],
           name: f.file.name,
@@ -129,6 +142,8 @@ export function reducer(state: Project | null, action: Action): Project | null {
           roleSource: roles[i].source,
           mute: false,
           solo: false,
+          gainDb: 0,
+          pan: null,
         })),
       }
     }
@@ -177,12 +192,24 @@ export function reducer(state: Project | null, action: Action): Project | null {
       return { ...state, analysis: 'done', findings: action.findings, variant: action.findings.some((f) => f.applied) ? 'fixed' : state.variant }
     case 'analysis-error':
       return { ...state, analysis: 'error', analysisError: action.error }
-    case 'set-applied':
+    case 'set-applied': {
+      const ids = new Set(affectedFindingIds(state.findings, action.id))
       return {
         ...state,
-        overrides: { ...state.overrides, [action.id]: action.applied },
-        findings: state.findings.map((f) => (f.id === action.id ? { ...f, applied: action.applied } : f)),
+        overrides: overridesAfter(state.overrides, state.findings, action.id, action.applied),
+        findings: state.findings.map((f) => (ids.has(f.id) ? { ...f, applied: action.applied } : f)),
       }
+    }
+    case 'set-gain':
+      return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, gainDb: action.gainDb })) }
+    case 'set-pan':
+      return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, pan: action.pan })) }
+    case 'set-master':
+      return { ...state, masterDb: action.masterDb }
+    case 'toggle-mixer':
+      return { ...state, mixerOpen: !state.mixerOpen }
+    case 'reset-mixer':
+      return { ...state, masterDb: 0, tracks: state.tracks.map((t) => ({ ...t, gainDb: 0, pan: null, mute: false, solo: false })) }
     case 'set-variant':
       return { ...state, variant: action.variant }
     case 'toggle-mute':
@@ -192,6 +219,24 @@ export function reducer(state: Project | null, action: Action): Project | null {
     case 'clear-solo':
       return { ...state, tracks: state.tracks.map((t) => (t.solo ? { ...t, solo: false } : t)) }
   }
+}
+
+/** Trims are one take-wide cut, so a decision on any track's trim applies to all of them. */
+export function affectedFindingIds(findings: readonly Finding[], id: string): string[] {
+  const target = findings.find((f) => f.id === id)
+  if (target?.stage === 'trims') return findings.filter((f) => f.stage === 'trims').map((f) => f.id)
+  return [id]
+}
+
+export function overridesAfter(
+  overrides: Record<string, boolean>,
+  findings: readonly Finding[],
+  id: string,
+  applied: boolean,
+): Record<string, boolean> {
+  const next = { ...overrides }
+  for (const fid of affectedFindingIds(findings, id)) next[fid] = applied
+  return next
 }
 
 function stale(status: AnalysisStatus): AnalysisStatus {
