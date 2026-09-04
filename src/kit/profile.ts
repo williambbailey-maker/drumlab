@@ -22,10 +22,17 @@ export interface KitInput {
   notes?: string
 }
 
+export interface RoomNotes {
+  description: string
+  /** Surfaces and conditions the analysis should expect to see in the audio. */
+  hazards: string[]
+}
+
 export interface KitProfile {
   id: string
   name: string
   interface: string
+  room: RoomNotes
   inputs: KitInput[]
   /** Roles that should sit in a fixed time relationship; first is the reference. */
   alignmentReference: StemRole[]
@@ -51,6 +58,17 @@ export const ATTIC_KIT: KitProfile = {
   id: 'attic-kit',
   name: 'Attic kit',
   interface: 'Focusrite 8-in',
+  room: {
+    description:
+      'Small insulated attic. Sloped ceiling low over the kit, walls hung with fabric, foil-faced insulation showing in places, rug on a wood floor, window directly behind the kick. Kit is kick, snare, hats and one floor tom.',
+    hazards: [
+      'Ceiling is close above the overheads: expect a strong early reflection and comb filtering in the OH pair.',
+      'Window glass directly behind the kick reflects into the room mic and overheads.',
+      'Foil-faced insulation reflects high frequencies even though the room sounds dead.',
+      'A mains extension cord runs across the floor alongside the mic cables, near the floor-mounted boundary mic: hum risk.',
+      'Room mic is 3 ft in front of the kick, so it behaves as a front-of-kit mono mic rather than ambience.',
+    ],
+  },
   inputs: [
     {
       input: 1,
@@ -84,25 +102,25 @@ export const ATTIC_KIT: KitProfile = {
       input: 4,
       role: 'kick_out',
       mic: 'Sennheiser boundary condenser',
-      placement: 'On the floor in front of the kick drum',
+      placement: 'On the rug about a foot in front of the kick front head, which has a port hole',
       level: 0,
-      distanceToKickM: inches(26),
-      notes: 'Boundary mic on the floor; polarity relative to kick in is not obvious, measure it.',
+      distanceToKickM: inches(30),
+      notes: 'Boundary mic on the floor next to a mains cord; polarity relative to kick in is not obvious, measure it.',
     },
     {
       input: 5,
       role: 'hat',
       mic: 'sE7 pencil condenser',
-      placement: '2" above the hi-hat',
+      placement: 'At the outer edge of the hi-hat, roughly at cymbal height',
       level: 3,
-      distanceToSnareM: inches(14),
+      distanceToSnareM: inches(12),
       notes: 'Expect heavy snare bleed; snare-to-hat delay ~1 ms.',
     },
     {
       input: 6,
       role: 'snare_bottom',
       mic: 'Samson C01 pencil condenser',
-      placement: 'Under the snare, pointing up',
+      placement: 'On a short stand under the snare, pointing up at the snare wires',
       level: 3,
       distanceToSnareM: inches(4),
       notes: 'Usually needs polarity flipped against snare top.',
@@ -111,7 +129,7 @@ export const ATTIC_KIT: KitProfile = {
       input: 7,
       role: 'snare_top',
       mic: 'Shure SM57',
-      placement: '2" from the top head, angled at the centre',
+      placement: 'Clipped at the rim, 2" from the top head, angled at the centre; head is taped and cloth-dampened',
       level: 6,
       distanceToSnareM: inches(2),
     },
@@ -132,7 +150,7 @@ export const ATTIC_KIT: KitProfile = {
   ],
   mainsHz: null,
   notes: [
-    'Only tom is a floor tom, often dampened, with no close mic: it lives in the overheads and room.',
+    'Only tom is a floor tom, dampened with a blanket, with no close mic: it lives in the overheads and room.',
     'No cymbals other than hi-hat.',
     'Snare tuned high.',
     'Sample rate unknown; read it from the files.',
