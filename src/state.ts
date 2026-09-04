@@ -45,6 +45,36 @@ function update(tracks: Track[], id: string, patch: (t: Track) => Track): Track[
   return tracks.map((t) => (t.id === id ? patch(t) : t))
 }
 
+/** Roles for the two halves of a stereo file, given the role guessed for the whole file. */
+export function splitRole(role: StemRole): [StemRole, StemRole] {
+  if (role === 'oh_l' || role === 'oh_r' || role === 'oh_mono') return ['oh_l', 'oh_r']
+  if (role === 'room_l' || role === 'room_r' || role === 'room_mono') return ['room_l', 'room_r']
+  return [role, role]
+}
+
+/**
+ * A stereo interleaved file becomes two mono tracks so each side gets its own
+ * role, mute/solo and later its own findings. Export re-joins them by id.
+ */
+function splitStereo(track: Track, audio: TrackAudio): Track[] {
+  const roles = splitRole(track.role)
+  const sides = ['L', 'R'] as const
+  return sides.map((side, i) => ({
+    ...track,
+    id: `${track.id}:${side}`,
+    name: `${track.name} · ${side}`,
+    status: 'ready',
+    error: undefined,
+    role: roles[i],
+    audio: {
+      ...audio,
+      channels: [audio.channels[i]],
+      peaks: [audio.peaks[i]],
+      peak: audio.channels[i].reduce((m, v) => Math.max(m, Math.abs(v)), 0),
+    },
+  }))
+}
+
 export function reducer(state: Project | null, action: Action): Project | null {
   switch (action.type) {
     case 'open': {
@@ -79,8 +109,15 @@ export function reducer(state: Project | null, action: Action): Project | null {
   }
   if (!state) return state
   switch (action.type) {
-    case 'decoded':
+    case 'decoded': {
+      if (action.audio.channels.length === 2) {
+        return {
+          ...state,
+          tracks: state.tracks.flatMap((t) => (t.id === action.id ? splitStereo(t, action.audio) : [t])),
+        }
+      }
       return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, status: 'ready', audio: action.audio, error: undefined })) }
+    }
     case 'decode-error':
       return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, status: 'error', error: action.error })) }
     case 'set-role':
