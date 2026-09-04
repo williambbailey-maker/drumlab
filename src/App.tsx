@@ -142,7 +142,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col" {...handlers}>
       <header className="flex items-baseline gap-5 border-b border-rule px-8 py-4">
-        <h1 className="font-display text-2xl font-medium tracking-tight">Drum lab</h1>
+        <h1 className="font-display text-5xl font-medium leading-none tracking-tight">drum lab</h1>
         {project && (
           <>
             <span className="font-display text-lg italic text-ink-soft">{project.name}</span>
