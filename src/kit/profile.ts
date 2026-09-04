@@ -38,7 +38,7 @@ export interface KitProfile {
   alignmentReference: StemRole[]
   /** Mic pairs expected to be checked against each other for polarity. */
   polarityPairs: Array<[StemRole, StemRole]>
-  /** Mains frequency for the hum check; null until known. */
+  /** Mains frequency for the hum check (US: 60). */
   mainsHz: 50 | 60 | null
   notes: string[]
 }
@@ -138,7 +138,7 @@ export const ATTIC_KIT: KitProfile = {
       role: 'kick_in',
       mic: 'Shure Beta 52A',
       placement: 'Inside the kick drum',
-      level: 5,
+      level: 6,
       distanceToKickM: inches(6),
     },
   ],
@@ -148,7 +148,7 @@ export const ATTIC_KIT: KitProfile = {
     ['kick_in', 'kick_out'],
     ['oh_l', 'oh_r'],
   ],
-  mainsHz: null,
+  mainsHz: 60,
   notes: [
     'Only tom is a floor tom, dampened with a blanket, with no close mic: it lives in the overheads and room.',
     'No cymbals other than hi-hat.',
