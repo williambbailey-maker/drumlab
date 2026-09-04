@@ -1,15 +1,19 @@
 /**
- * Sum-to-stereo playback of decoded stems. Web Audio is used only here;
- * all analysis stays on Float32Arrays elsewhere.
+ * Sum-to-stereo playback of decoded stems with instant raw/fixed A/B.
+ * Web Audio is used only here; all analysis stays on Float32Arrays elsewhere.
  *
- * Each track gets its own lane: BufferSource → Gain (mute/solo) → StereoPanner
- * → master. Every play() creates fresh sources started at one shared context
- * time, so tracks stay sample-locked regardless of when they were added.
+ * Each track is a lane: two BufferSources (raw and fixed) run sample-locked
+ * into two gains whose balance is the A/B switch, then a mix gain
+ * (mute/solo) and a StereoPanner into the master.
  */
+
+export type Variant = 'raw' | 'fixed'
 
 export interface EngineTrack {
   id: string
-  channels: Float32Array[]
+  raw: Float32Array[]
+  /** Processed version; omit when nothing has been applied. */
+  fixed?: Float32Array[]
   sampleRate: number
   /** -1 left … +1 right. Stereo files pass through unchanged at 0. */
   pan: number
@@ -22,20 +26,27 @@ export interface MixState {
 }
 
 interface Lane {
-  buffer: AudioBuffer
-  gain: GainNode
+  raw: AudioBuffer
+  fixed: AudioBuffer | null
+  fixedKey: Float32Array | null
+  rawGain: GainNode
+  fixedGain: GainNode
+  mix: GainNode
   panner: StereoPannerNode
-  source: AudioBufferSourceNode | null
+  rawSource: AudioBufferSourceNode | null
+  fixedSource: AudioBufferSourceNode | null
   duration: number
 }
 
 const START_LATENCY = 0.03
+const SWITCH_TC = 0.004
 
 export class PlaybackEngine {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private lanes = new Map<string, Lane>()
-  private mix = new Map<string, MixState>()
+  private mixState = new Map<string, MixState>()
+  private variant: Variant = 'raw'
   private t0 = 0
   private offset = 0
   private _playing = false
@@ -46,6 +57,10 @@ export class PlaybackEngine {
 
   get playing(): boolean {
     return this._playing
+  }
+
+  get currentVariant(): Variant {
+    return this.variant
   }
 
   get duration(): number {
@@ -69,15 +84,22 @@ export class PlaybackEngine {
     return this.ctx
   }
 
-  /** Replace the set of playable tracks. Existing lanes are kept; new ones join mid-playback in sync. */
+  private makeBuffer(channels: Float32Array[], sampleRate: number): AudioBuffer | null {
+    const frames = channels[0]?.length ?? 0
+    if (frames === 0) return null
+    const buffer = this.ensure().createBuffer(channels.length, frames, sampleRate)
+    channels.forEach((c, i) => buffer.copyToChannel(c as Float32Array<ArrayBuffer>, i))
+    return buffer
+  }
+
+  /** Replace the set of playable tracks. Existing lanes are kept; new or changed material joins mid-playback in sync. */
   setTracks(tracks: EngineTrack[]): void {
     if (tracks.length === 0 && this.lanes.size === 0) return
     const ctx = this.ensure()
     const keep = new Set(tracks.map((t) => t.id))
     for (const [id, lane] of this.lanes) {
       if (keep.has(id)) continue
-      this.stopSource(lane)
-      lane.gain.disconnect()
+      this.stopLane(lane)
       lane.panner.disconnect()
       this.lanes.delete(id)
     }
@@ -85,30 +107,66 @@ export class PlaybackEngine {
       const existing = this.lanes.get(t.id)
       if (existing) {
         existing.panner.pan.value = t.pan
+        const key = t.fixed?.[0] ?? null
+        if (key !== existing.fixedKey) this.replaceFixed(existing, t)
         continue
       }
-      const frames = t.channels[0]?.length ?? 0
-      if (frames === 0 || t.channels.length === 0) continue
-      const buffer = ctx.createBuffer(t.channels.length, frames, t.sampleRate)
-      t.channels.forEach((c, i) => buffer.copyToChannel(c as Float32Array<ArrayBuffer>, i))
-      const gain = ctx.createGain()
+      const raw = this.makeBuffer(t.raw, t.sampleRate)
+      if (!raw) continue
+      const rawGain = ctx.createGain()
+      const fixedGain = ctx.createGain()
+      const mix = ctx.createGain()
       const panner = ctx.createStereoPanner()
       panner.pan.value = t.pan
-      gain.connect(panner)
+      rawGain.connect(mix)
+      fixedGain.connect(mix)
+      mix.connect(panner)
       panner.connect(this.master!)
-      const lane: Lane = { buffer, gain, panner, source: null, duration: buffer.duration }
+      const lane: Lane = {
+        raw,
+        fixed: null,
+        fixedKey: null,
+        rawGain,
+        fixedGain,
+        mix,
+        panner,
+        rawSource: null,
+        fixedSource: null,
+        duration: raw.duration,
+      }
       this.lanes.set(t.id, lane)
+      this.replaceFixed(lane, t)
       if (this._playing) {
         const now = ctx.currentTime
-        this.startSource(lane, now, this.offset + Math.max(0, now - this.t0))
+        this.startLane(lane, now, this.offset + Math.max(0, now - this.t0))
       }
     }
     this.applyGains()
     if (this._playing && this.offset >= this.duration) this.finish()
   }
 
+  private replaceFixed(lane: Lane, t: EngineTrack): void {
+    if (lane.fixedSource) {
+      this.stopSource(lane.fixedSource)
+      lane.fixedSource = null
+    }
+    lane.fixed = t.fixed ? this.makeBuffer(t.fixed, t.sampleRate) : null
+    lane.fixedKey = t.fixed?.[0] ?? null
+    if (lane.fixed) lane.duration = Math.max(lane.raw.duration, lane.fixed.duration)
+    if (this._playing && lane.fixed && this.ctx) {
+      const now = this.ctx.currentTime
+      lane.fixedSource = this.startSource(lane, lane.fixed, lane.fixedGain, now, this.offset + Math.max(0, now - this.t0), false)
+    }
+    this.applyVariantGains(lane)
+  }
+
+  setVariant(v: Variant): void {
+    this.variant = v
+    for (const lane of this.lanes.values()) this.applyVariantGains(lane)
+  }
+
   setMix(states: MixState[]): void {
-    this.mix = new Map(states.map((s) => [s.id, s]))
+    this.mixState = new Map(states.map((s) => [s.id, s]))
     this.applyGains()
   }
 
@@ -126,7 +184,7 @@ export class PlaybackEngine {
     this.gen++
     this.t0 = ctx.currentTime + START_LATENCY
     this._playing = true
-    for (const lane of this.lanes.values()) this.startSource(lane, this.t0, this.offset)
+    for (const lane of this.lanes.values()) this.startLane(lane, this.t0, this.offset)
   }
 
   pause(): void {
@@ -157,36 +215,55 @@ export class PlaybackEngine {
     this.master = null
   }
 
-  private startSource(lane: Lane, when: number, offset: number): void {
-    const ctx = this.ctx!
-    if (offset >= lane.duration) return
-    const src = ctx.createBufferSource()
-    src.buffer = lane.buffer
-    src.connect(lane.gain)
-    const gen = this.gen
-    src.onended = () => {
-      if (gen !== this.gen || lane.source !== src) return
-      lane.source = null
-      if (this._playing && this.position >= this.duration - 0.02) this.finish()
-    }
-    src.start(when, offset)
-    lane.source = src
+  private startLane(lane: Lane, when: number, offset: number): void {
+    lane.rawSource = this.startSource(lane, lane.raw, lane.rawGain, when, offset, true)
+    lane.fixedSource = lane.fixed ? this.startSource(lane, lane.fixed, lane.fixedGain, when, offset, false) : null
   }
 
-  private stopSource(lane: Lane): void {
-    if (!lane.source) return
+  private startSource(
+    lane: Lane,
+    buffer: AudioBuffer,
+    dest: GainNode,
+    when: number,
+    offset: number,
+    watchEnd: boolean,
+  ): AudioBufferSourceNode | null {
+    const ctx = this.ctx!
+    if (offset >= buffer.duration) return null
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.connect(dest)
+    if (watchEnd) {
+      const gen = this.gen
+      src.onended = () => {
+        if (gen !== this.gen || lane.rawSource !== src) return
+        lane.rawSource = null
+        if (this._playing && this.position >= this.duration - 0.02) this.finish()
+      }
+    }
+    src.start(when, offset)
+    return src
+  }
+
+  private stopSource(src: AudioBufferSourceNode): void {
     try {
-      lane.source.onended = null
-      lane.source.stop()
+      src.onended = null
+      src.stop()
     } catch {
       /* already stopped */
     }
-    lane.source.disconnect()
-    lane.source = null
+    src.disconnect()
+  }
+
+  private stopLane(lane: Lane): void {
+    if (lane.rawSource) this.stopSource(lane.rawSource)
+    if (lane.fixedSource) this.stopSource(lane.fixedSource)
+    lane.rawSource = null
+    lane.fixedSource = null
   }
 
   private stopAll(): void {
-    for (const lane of this.lanes.values()) this.stopSource(lane)
+    for (const lane of this.lanes.values()) this.stopLane(lane)
   }
 
   private finish(): void {
@@ -197,15 +274,23 @@ export class PlaybackEngine {
     this.onEnded?.()
   }
 
+  private applyVariantGains(lane: Lane): void {
+    if (!this.ctx) return
+    const now = this.ctx.currentTime
+    const useFixed = this.variant === 'fixed' && lane.fixed !== null
+    lane.rawGain.gain.setTargetAtTime(useFixed ? 0 : 1, now, SWITCH_TC)
+    lane.fixedGain.gain.setTargetAtTime(useFixed ? 1 : 0, now, SWITCH_TC)
+  }
+
   private applyGains(): void {
     if (!this.ctx) return
     let anySolo = false
-    for (const m of this.mix.values()) if (m.solo) anySolo = true
+    for (const m of this.mixState.values()) if (m.solo) anySolo = true
     const now = this.ctx.currentTime
     for (const [id, lane] of this.lanes) {
-      const m = this.mix.get(id)
+      const m = this.mixState.get(id)
       const g = !m ? 1 : m.mute ? 0 : anySolo && !m.solo ? 0 : 1
-      lane.gain.gain.setTargetAtTime(g, now, 0.008)
+      lane.mix.gain.setTargetAtTime(g, now, 0.008)
     }
   }
 }

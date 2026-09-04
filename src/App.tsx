@@ -1,22 +1,29 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { PlaybackEngine } from './audio/engine'
+import { PlaybackEngine, type EngineTrack, type Variant } from './audio/engine'
 import { DropZone } from './components/DropZone'
+import { KitPicker } from './components/KitPicker'
 import { TrackList } from './components/TrackList'
 import { Transport } from './components/Transport'
+import { fixesFor } from './dsp/analyze'
+import { renderFixed } from './dsp/render'
+import type { AnalysisInput, Region } from './dsp/types'
 import { useFileDrop } from './hooks/useFileDrop'
+import { DEFAULT_KIT, expectedLeadsMs, kitById, type KitProfile } from './kit/profile'
+import { analyze, Superseded } from './lib/analyzer'
 import { decodeFile } from './lib/decoder'
 import { formatRate } from './lib/format'
 import type { IngestResult } from './lib/ingest'
 import { panForRole, type StemRole } from './lib/roles'
 import { kvGet, kvSet } from './lib/store'
-import { DEFAULT_KIT, kitById, type KitProfile } from './kit/profile'
-import { KitPicker } from './components/KitPicker'
-import { newId, projectDuration, reducer } from './state'
+import { defaultRegion, newId, projectDuration, reducer, type Project } from './state'
 
 const KIT_KEY = 'kit-profile-id'
 
 export default function App() {
   const [project, dispatch] = useReducer(reducer, null)
+  const projectRef = useRef<Project | null>(project)
+  projectRef.current = project
+
   const engineRef = useRef<PlaybackEngine | null>(null)
   if (!engineRef.current) engineRef.current = new PlaybackEngine()
   const engine = engineRef.current
@@ -32,12 +39,6 @@ export default function App() {
     })
   }, [])
 
-  const chooseKit = useCallback((next: KitProfile) => {
-    setKit(next)
-    void kvSet(KIT_KEY, next.id)
-    dispatch({ type: 'set-kit', kit: next })
-  }, [])
-
   useEffect(() => {
     engine.onEnded = () => {
       setPlaying(false)
@@ -47,6 +48,39 @@ export default function App() {
       engine.onEnded = null
     }
   }, [engine])
+
+  // ---- analysis -----------------------------------------------------------
+  const runAnalysis = useCallback(
+    (overrides?: Record<string, boolean>) => {
+      const p = projectRef.current
+      if (!p || !p.region) return
+      const ready = p.tracks.filter((t) => t.status === 'ready' && t.audio)
+      if (ready.length === 0) return
+      const input: AnalysisInput = {
+        tracks: ready.map((t) => ({ id: t.id, role: t.role, sampleRate: t.audio!.sampleRate, samples: t.audio!.channels[0] })),
+        region: p.region,
+        applied: overrides ?? p.overrides,
+        expectedLeadMs: expectedLeadsMs(p.kit),
+      }
+      dispatch({ type: 'analysis-start' })
+      analyze(input).then(
+        (result) => {
+          if (projectRef.current !== null) dispatch({ type: 'analysis-done', findings: result.findings })
+        },
+        (err: unknown) => {
+          if (err instanceof Superseded) return
+          dispatch({ type: 'analysis-error', error: err instanceof Error ? err.message : String(err) })
+        },
+      )
+    },
+    [],
+  )
+
+  const chooseKit = useCallback((next: KitProfile) => {
+    setKit(next)
+    void kvSet(KIT_KEY, next.id)
+    dispatch({ type: 'set-kit', kit: next })
+  }, [])
 
   const open = useCallback(
     (result: IngestResult) => {
@@ -76,21 +110,54 @@ export default function App() {
   const tracks = project?.tracks ?? []
   const duration = useMemo(() => projectDuration(project), [project])
   const ready = tracks.filter((t) => t.status === 'ready' && t.audio)
+  const decoding = tracks.filter((t) => t.status === 'decoding').length
 
-  // Keep the engine's lanes in step with decoded tracks and their role-derived pans.
+  // Default region once the take's length is known.
+  useEffect(() => {
+    if (project && project.region === null && duration > 0 && decoding === 0) {
+      dispatch({ type: 'set-region', region: defaultRegion(duration) })
+    }
+  }, [project, duration, decoding])
+
+  const findings = project?.findings ?? []
+
+  // Fixed (processed) audio per track, from the applied fixes.
+  const fixedById = useMemo(() => {
+    const out = new Map<string, Float32Array[]>()
+    if (findings.length === 0) return out
+    for (const t of ready) {
+      const fixes = fixesFor(findings, t.id)
+      if (fixes.length === 0) continue
+      out.set(t.id, [renderFixed(t.audio!.channels[0], fixes)])
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findings, tracks])
+
+  // Keep the engine's lanes in step with decoded tracks, their pans and their fixed renders.
   const laneKey = ready.map((t) => `${t.id}:${t.role}`).join('|')
   useEffect(() => {
-    engine.setTracks(
-      ready.map((t) => ({ id: t.id, channels: t.audio!.channels, sampleRate: t.audio!.sampleRate, pan: panForRole(t.role) })),
-    )
+    const lanes: EngineTrack[] = ready.map((t) => ({
+      id: t.id,
+      raw: t.audio!.channels,
+      fixed: fixedById.get(t.id),
+      sampleRate: t.audio!.sampleRate,
+      pan: panForRole(t.role),
+    }))
+    engine.setTracks(lanes)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, laneKey])
+  }, [engine, laneKey, fixedById])
 
   const mixKey = tracks.map((t) => `${t.id}:${t.mute ? 1 : 0}${t.solo ? 1 : 0}`).join('|')
   useEffect(() => {
     engine.setMix(tracks.map((t) => ({ id: t.id, mute: t.mute, solo: t.solo })))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, mixKey])
+
+  const variant: Variant = project?.variant ?? 'raw'
+  useEffect(() => {
+    engine.setVariant(variant)
+  }, [engine, variant])
 
   const toggle = useCallback(() => {
     if (engine.playing) {
@@ -120,13 +187,24 @@ export default function App() {
   const onRole = useCallback((id: string, role: StemRole) => dispatch({ type: 'set-role', id, role }), [])
   const onMute = useCallback((id: string) => dispatch({ type: 'toggle-mute', id }), [])
   const onSolo = useCallback((id: string) => dispatch({ type: 'toggle-solo', id }), [])
+  const onRegion = useCallback((region: Region) => dispatch({ type: 'set-region', region }), [])
+  const onVariant = useCallback((v: Variant) => dispatch({ type: 'set-variant', variant: v }), [])
+  const onApplied = useCallback(
+    (id: string, applied: boolean) => {
+      dispatch({ type: 'set-applied', id, applied })
+      const p = projectRef.current
+      // Re-measure downstream stages with this decision in force.
+      runAnalysis({ ...(p?.overrides ?? {}), [id]: applied })
+    },
+    [runAnalysis],
+  )
+  const onAnalyze = useCallback(() => runAnalysis(), [runAnalysis])
 
   const close = () => {
     stop()
     dispatch({ type: 'close' })
   }
 
-  const decoding = tracks.filter((t) => t.status === 'decoding').length
   const rates = new Set(ready.map((t) => t.audio!.sampleRate))
   const depths = new Set(ready.map((t) => (t.audio!.format === 'float' ? `${t.audio!.bitDepth}f` : `${t.audio!.bitDepth}`)))
   const summary = [
@@ -170,17 +248,19 @@ export default function App() {
             </div>
           ) : (
             <div className="bg-paper/92">
-            <TrackList
-              project={project}
-              engine={engine}
-              playing={playing}
-              duration={duration}
-              positionTick={positionTick}
-              onRole={onRole}
-              onMute={onMute}
-              onSolo={onSolo}
-              onSeek={seek}
-            />
+              <TrackList
+                project={project}
+                engine={engine}
+                playing={playing}
+                duration={duration}
+                positionTick={positionTick}
+                onRole={onRole}
+                onMute={onMute}
+                onSolo={onSolo}
+                onSeek={seek}
+                onRegion={onRegion}
+                onApplied={onApplied}
+              />
             </div>
           )
         ) : (
@@ -195,8 +275,15 @@ export default function App() {
           duration={duration}
           ready={ready.length > 0}
           positionTick={positionTick}
+          region={project.region}
+          analysis={project.analysis}
+          analysisError={project.analysisError}
+          findings={findings}
+          variant={variant}
           onToggle={toggle}
           onStop={stop}
+          onAnalyze={onAnalyze}
+          onVariant={onVariant}
         />
       )}
 

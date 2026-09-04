@@ -2,7 +2,9 @@ import { useCallback, useRef } from 'react'
 import type { PlaybackEngine } from '../audio/engine'
 import { useAnimationFrame } from '../hooks/useAnimationFrame'
 import type { StemRole } from '../lib/roles'
+import type { Region } from '../dsp/types'
 import type { Project } from '../state'
+import { FindingsRow } from './FindingsRow'
 import { Ruler } from './Ruler'
 import { CONTROL_COL, LABEL_COL, TrackRow } from './TrackRow'
 
@@ -17,9 +19,26 @@ interface Props {
   onMute: (id: string) => void
   onSolo: (id: string) => void
   onSeek: (seconds: number) => void
+  onRegion: (region: Region) => void
+  onApplied: (id: string, applied: boolean) => void
 }
 
-export function TrackList({ project, engine, playing, duration, positionTick, onRole, onMute, onSolo, onSeek }: Props) {
+const waveLeft = (frac: number) => `calc(${LABEL_COL}px + ${frac} * (100% - ${LABEL_COL + CONTROL_COL}px))`
+const waveWidth = (frac: number) => `calc(${frac} * (100% - ${LABEL_COL + CONTROL_COL}px))`
+
+export function TrackList({
+  project,
+  engine,
+  playing,
+  duration,
+  positionTick,
+  onRole,
+  onMute,
+  onSolo,
+  onSeek,
+  onRegion,
+  onApplied,
+}: Props) {
   const playhead = useRef<HTMLDivElement>(null)
 
   useAnimationFrame(
@@ -33,7 +52,7 @@ export function TrackList({ project, engine, playing, duration, positionTick, on
       }
       const frac = Math.max(0, Math.min(1, engine.position / duration))
       el.style.display = ''
-      el.style.left = `calc(${LABEL_COL}px + ${frac} * (100% - ${LABEL_COL + CONTROL_COL}px))`
+      el.style.left = waveLeft(frac)
     },
     [duration, positionTick],
   )
@@ -44,26 +63,45 @@ export function TrackList({ project, engine, playing, duration, positionTick, on
   const roleCounts = new Map<StemRole, number>()
   for (const r of rolesInUse) roleCounts.set(r, (roleCounts.get(r) ?? 0) + 1)
   const anySolo = project.tracks.some((t) => t.solo)
+  const region = project.region
+  const showFindings = project.findings.length > 0
 
   return (
     <div className="relative">
-      <div className="grid border-b-0" style={{ gridTemplateColumns: `${LABEL_COL}px minmax(0, 1fr) ${CONTROL_COL}px` }}>
+      <div className="grid" style={{ gridTemplateColumns: `${LABEL_COL}px minmax(0, 1fr) ${CONTROL_COL}px` }}>
         <div className="border-b border-rule pl-8 font-display text-xs italic leading-6 text-muted">track</div>
-        <Ruler duration={duration} onSeek={seekFraction} />
+        <Ruler duration={duration} region={region} onSeek={seekFraction} onRegion={onRegion} />
         <div className="border-b border-rule text-center font-display text-xs italic leading-6 text-muted">mix</div>
       </div>
       {project.tracks.map((t) => (
-        <TrackRow
-          key={t.id}
-          track={t}
-          rolesInUse={rolesInUse}
-          duplicate={t.role !== 'other' && (roleCounts.get(t.role) ?? 0) > 1}
-          dimmed={t.mute || (anySolo && !t.solo)}
-          onRole={onRole}
-          onMute={onMute}
-          onSolo={onSolo}
-          onSeek={seekFraction}
-        />
+        <div key={t.id} className="relative">
+          <TrackRow
+            track={t}
+            rolesInUse={rolesInUse}
+            duplicate={t.role !== 'other' && (roleCounts.get(t.role) ?? 0) > 1}
+            dimmed={t.mute || (anySolo && !t.solo)}
+            onRole={onRole}
+            onMute={onMute}
+            onSolo={onSolo}
+            onSeek={seekFraction}
+          />
+          {region && duration > 0 && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute top-0 h-20 border-x border-rust/40 bg-rust/[0.06]"
+              style={{ left: waveLeft(region.start / duration), width: waveWidth((region.end - region.start) / duration) }}
+            />
+          )}
+          {showFindings && (
+            <FindingsRow
+              trackId={t.id}
+              findings={project.findings.filter((f) => f.trackId === t.id)}
+              soloed={t.solo}
+              onApplied={onApplied}
+              onSolo={onSolo}
+            />
+          )}
+        </div>
       ))}
       <div
         ref={playhead}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SEPTEMBER_2026_KIT, delayMs, inputNumberFromName, kitById, roleForInput } from './profile'
+import { NO_KIT, SEPTEMBER_2026_KIT, delayMs, expectedLeadsMs, inputNumberFromName, kitById, roleForInput } from './profile'
 
 describe('inputNumberFromName', () => {
   it('reads generic DAW track names', () => {
@@ -21,6 +21,20 @@ describe('kitById', () => {
   it('falls back to the default for unknown ids', () => {
     expect(kitById('nope').id).toBe('september-2026-drum-config')
     expect(kitById('none').name).toBe('No profile')
+  })
+})
+
+describe('expectedLeadsMs', () => {
+  it('derives per-role leads from the profile distances', () => {
+    const leads = expectedLeadsMs(SEPTEMBER_2026_KIT)
+    expect(leads.snare_top).toBeGreaterThan(1.5)
+    expect(leads.snare_top).toBeLessThan(2.5)
+    expect(leads.kick_in).toBeGreaterThan(2)
+    expect(leads.room_mono).toBeLessThan(0)
+    expect(leads.oh_l).toBeUndefined()
+  })
+  it('is empty without an overhead', () => {
+    expect(expectedLeadsMs(NO_KIT)).toEqual({})
   })
 })
 

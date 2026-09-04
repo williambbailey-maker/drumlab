@@ -181,6 +181,27 @@ export function kitById(id: string | undefined): KitProfile {
   return KIT_PROFILES.find((k) => k.id === id) ?? DEFAULT_KIT
 }
 
+/**
+ * Expected lead of each role relative to the overheads, in ms, from the
+ * profile's distances: positive means the mic hears the source before the
+ * overheads do. Snare-side mics use snare distances, kick mics use kick
+ * distances, everything else uses whichever distance both have.
+ */
+export function expectedLeadsMs(profile: KitProfile): Partial<Record<StemRole, number>> {
+  const oh = profile.inputs.find((i) => i.role === 'oh_l' || i.role === 'oh_r' || i.role === 'oh_mono')
+  if (!oh) return {}
+  const out: Partial<Record<StemRole, number>> = {}
+  for (const i of profile.inputs) {
+    if (i.role === 'oh_l' || i.role === 'oh_r' || i.role === 'oh_mono') continue
+    const kickSide = i.role === 'kick_in' || i.role === 'kick_out'
+    const mic = kickSide ? i.distanceToKickM : (i.distanceToSnareM ?? i.distanceToKickM)
+    const ref = kickSide ? oh.distanceToKickM : (i.distanceToSnareM !== undefined ? oh.distanceToSnareM : oh.distanceToKickM)
+    if (mic === undefined || ref === undefined) continue
+    out[i.role] = Math.round(delayMs(ref - mic) * 100) / 100
+  }
+  return out
+}
+
 /** Role for an interface input number, or null if the profile has no such input. */
 export function roleForInput(profile: KitProfile, input: number): StemRole | null {
   return profile.inputs.find((i) => i.input === input)?.role ?? null

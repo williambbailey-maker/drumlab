@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
-import type { PlaybackEngine } from '../audio/engine'
+import type { PlaybackEngine, Variant } from '../audio/engine'
 import { useAnimationFrame } from '../hooks/useAnimationFrame'
 import { formatTime } from '../lib/format'
+import type { Finding, Region } from '../dsp/types'
+import type { AnalysisStatus } from '../state'
 
 interface Props {
   engine: PlaybackEngine
@@ -9,11 +11,33 @@ interface Props {
   duration: number
   ready: boolean
   positionTick: number
+  region: Region | null
+  analysis: AnalysisStatus
+  analysisError?: string
+  findings: Finding[]
+  variant: Variant
   onToggle: () => void
   onStop: () => void
+  onAnalyze: () => void
+  onVariant: (v: Variant) => void
 }
 
-export function Transport({ engine, playing, duration, ready, positionTick, onToggle, onStop }: Props) {
+export function Transport({
+  engine,
+  playing,
+  duration,
+  ready,
+  positionTick,
+  region,
+  analysis,
+  analysisError,
+  findings,
+  variant,
+  onToggle,
+  onStop,
+  onAnalyze,
+  onVariant,
+}: Props) {
   const timeRef = useRef<HTMLSpanElement>(null)
 
   useAnimationFrame(
@@ -24,10 +48,20 @@ export function Transport({ engine, playing, duration, ready, positionTick, onTo
     [positionTick],
   )
 
+  const hasFixes = findings.some((f) => f.fix)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
-      if (target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(target.tagName)) return
+      const tag = target?.tagName ?? ''
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return
+      if (e.code === 'KeyA' && hasFixes) {
+        e.preventDefault()
+        onVariant(variant === 'raw' ? 'fixed' : 'raw')
+        return
+      }
+      // Space and Home on a focused button belong to the button.
+      if (tag === 'BUTTON') return
       if (e.code === 'Space') {
         e.preventDefault()
         onToggle()
@@ -38,10 +72,30 @@ export function Transport({ engine, playing, duration, ready, positionTick, onTo
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onToggle, onStop])
+  }, [onToggle, onStop, onVariant, variant, hasFixes])
+
+  const applied = findings.filter((f) => f.fix && f.applied).length
+  const bypassed = findings.filter((f) => f.fix && !f.applied).length
+  const attention = findings.filter((f) => f.severity === 'error').length
+  const summary =
+    analysis === 'done' || analysis === 'stale'
+      ? [
+          `${applied} ${applied === 1 ? 'fix' : 'fixes'} applied`,
+          bypassed ? `${bypassed} bypassed` : null,
+          attention ? `${attention} need${attention === 1 ? 's' : ''} attention` : null,
+          analysis === 'stale' ? 'region or roles changed' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : analysis === 'error'
+        ? `analysis failed: ${analysisError ?? 'unknown error'}`
+        : ''
+
+  const analyzeLabel =
+    analysis === 'running' ? 'Analyzing…' : analysis === 'done' ? 'Re-analyze' : analysis === 'stale' ? 'Re-analyze' : 'Analyze'
 
   return (
-    <footer className="sticky bottom-0 flex items-center gap-4 border-t border-rule bg-paper/95 px-8 py-3 backdrop-blur">
+    <footer className="sticky bottom-0 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/95 px-8 py-3 backdrop-blur">
       <button
         type="button"
         onClick={onToggle}
@@ -75,7 +129,50 @@ export function Transport({ engine, playing, duration, ready, positionTick, onTo
         <span ref={timeRef}>{formatTime(0, 2)}</span>
         <span className="text-muted"> / {formatTime(duration, 2)}</span>
       </div>
-      <div className="ml-auto font-mono text-[11px] text-muted">space play/pause · home stop · click a waveform to seek</div>
+
+      <div className="mx-2 h-6 w-px bg-rule" aria-hidden />
+
+      <div className="font-mono text-[11px] text-muted">
+        region{' '}
+        <span className="text-ink-soft">
+          {region ? `${formatTime(region.start, 1)}–${formatTime(region.end, 1)}` : '—'}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onAnalyze}
+        disabled={!ready || !region || analysis === 'running'}
+        className={`rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+          analysis === 'done' ? 'border border-rule text-ink-soft hover:border-ink-soft hover:text-ink' : 'bg-rust text-paper hover:bg-rust/90'
+        }`}
+      >
+        {analyzeLabel}
+      </button>
+
+      <div
+        className={`flex overflow-hidden rounded-md border border-rule font-mono text-xs ${hasFixes ? '' : 'opacity-40'}`}
+        role="group"
+        aria-label="Listen to raw or fixed stems"
+      >
+        {(['raw', 'fixed'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            disabled={!hasFixes}
+            onClick={() => onVariant(v)}
+            aria-pressed={variant === v}
+            className={`px-3 py-1.5 ${v === 'fixed' ? 'border-l border-rule' : ''} ${
+              variant === v && hasFixes ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-rule-soft'
+            }`}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+
+      {summary && <div className={`font-mono text-[11px] ${attention ? 'text-rust' : 'text-muted'}`}>{summary}</div>}
+
+      <div className="ml-auto font-mono text-[11px] text-muted">space play · home stop · a raw/fixed · drag ruler for region</div>
     </footer>
   )
 }

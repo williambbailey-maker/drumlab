@@ -1,4 +1,6 @@
 import { assignRoles, type StemRole } from './lib/roles'
+import type { Finding, Region } from './dsp/types'
+import type { Variant } from './audio/engine'
 import { inputNumberFromName, roleForInput, type KitProfile } from './kit/profile'
 import type { IngestFile } from './lib/ingest'
 import type { TrackAudio } from './lib/decoder'
@@ -19,11 +21,21 @@ export interface Track {
   solo: boolean
 }
 
+export type AnalysisStatus = 'idle' | 'running' | 'done' | 'stale' | 'error'
+
 export interface Project {
   name: string
   tracks: Track[]
   skipped: number
   kit: KitProfile
+  /** Analysis region in seconds; null until the take's length is known. */
+  region: Region | null
+  findings: Finding[]
+  analysis: AnalysisStatus
+  analysisError?: string
+  /** User Apply/Bypass decisions by finding id; absent means the finding's default. */
+  overrides: Record<string, boolean>
+  variant: Variant
 }
 
 export type Action =
@@ -35,6 +47,12 @@ export type Action =
   | { type: 'toggle-mute'; id: string }
   | { type: 'toggle-solo'; id: string }
   | { type: 'clear-solo' }
+  | { type: 'set-region'; region: Region }
+  | { type: 'analysis-start' }
+  | { type: 'analysis-done'; findings: Finding[] }
+  | { type: 'analysis-error'; error: string }
+  | { type: 'set-applied'; id: string; applied: boolean }
+  | { type: 'set-variant'; variant: Variant }
   | { type: 'close' }
 
 export function newId(): string {
@@ -96,6 +114,11 @@ export function reducer(state: Project | null, action: Action): Project | null {
         name: action.name,
         skipped: action.skipped,
         kit,
+        region: null,
+        findings: [],
+        analysis: 'idle',
+        overrides: {},
+        variant: 'raw',
         tracks: action.files.map((f, i) => ({
           id: action.ids[i],
           name: f.file.name,
@@ -134,13 +157,34 @@ export function reducer(state: Project | null, action: Action): Project | null {
       return {
         ...state,
         kit: action.kit,
+        analysis: stale(state.analysis),
         tracks: state.tracks.map((t, i) =>
           t.roleSource === 'user' ? t : { ...t, role: roles[i].role, roleSource: roles[i].source },
         ),
       }
     }
     case 'set-role':
-      return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, role: action.role, roleSource: 'user' })) }
+      return {
+        ...state,
+        analysis: stale(state.analysis),
+        tracks: update(state.tracks, action.id, (t) => ({ ...t, role: action.role, roleSource: 'user' })),
+      }
+    case 'set-region':
+      return { ...state, region: action.region, analysis: stale(state.analysis) }
+    case 'analysis-start':
+      return { ...state, analysis: 'running', analysisError: undefined }
+    case 'analysis-done':
+      return { ...state, analysis: 'done', findings: action.findings, variant: action.findings.some((f) => f.applied) ? 'fixed' : state.variant }
+    case 'analysis-error':
+      return { ...state, analysis: 'error', analysisError: action.error }
+    case 'set-applied':
+      return {
+        ...state,
+        overrides: { ...state.overrides, [action.id]: action.applied },
+        findings: state.findings.map((f) => (f.id === action.id ? { ...f, applied: action.applied } : f)),
+      }
+    case 'set-variant':
+      return { ...state, variant: action.variant }
     case 'toggle-mute':
       return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, mute: !t.mute })) }
     case 'toggle-solo':
@@ -148,6 +192,15 @@ export function reducer(state: Project | null, action: Action): Project | null {
     case 'clear-solo':
       return { ...state, tracks: state.tracks.map((t) => (t.solo ? { ...t, solo: false } : t)) }
   }
+}
+
+function stale(status: AnalysisStatus): AnalysisStatus {
+  return status === 'done' || status === 'stale' ? 'stale' : status
+}
+
+/** Default analysis region: the first 30 s, or the whole take if shorter. */
+export function defaultRegion(duration: number): Region {
+  return { start: 0, end: Math.min(30, duration) }
 }
 
 export function projectDuration(project: Project | null): number {
