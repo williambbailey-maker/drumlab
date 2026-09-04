@@ -8,7 +8,12 @@ import { decodeFile } from './lib/decoder'
 import { formatRate } from './lib/format'
 import type { IngestResult } from './lib/ingest'
 import { panForRole, type StemRole } from './lib/roles'
+import { kvGet, kvSet } from './lib/store'
+import { DEFAULT_KIT, kitById, type KitProfile } from './kit/profile'
+import { KitPicker } from './components/KitPicker'
 import { newId, projectDuration, reducer } from './state'
+
+const KIT_KEY = 'kit-profile-id'
 
 export default function App() {
   const [project, dispatch] = useReducer(reducer, null)
@@ -17,6 +22,21 @@ export default function App() {
   const engine = engineRef.current
   const [playing, setPlaying] = useState(false)
   const [positionTick, setPositionTick] = useState(0)
+  const [kit, setKit] = useState<KitProfile>(DEFAULT_KIT)
+  const kitRef = useRef(kit)
+  kitRef.current = kit
+
+  useEffect(() => {
+    void kvGet<string>(KIT_KEY).then((id) => {
+      if (id) setKit(kitById(id))
+    })
+  }, [])
+
+  const chooseKit = useCallback((next: KitProfile) => {
+    setKit(next)
+    void kvSet(KIT_KEY, next.id)
+    dispatch({ type: 'set-kit', kit: next })
+  }, [])
 
   useEffect(() => {
     engine.onEnded = () => {
@@ -33,12 +53,13 @@ export default function App() {
       engine.stop()
       setPlaying(false)
       setPositionTick((t) => t + 1)
+      const kit = kitRef.current
       if (result.files.length === 0) {
-        dispatch({ type: 'open', name: result.name, files: [], ids: [], skipped: result.skipped })
+        dispatch({ type: 'open', name: result.name, files: [], ids: [], skipped: result.skipped, kit })
         return
       }
       const ids = result.files.map(() => newId())
-      dispatch({ type: 'open', name: result.name, files: result.files, ids, skipped: result.skipped })
+      dispatch({ type: 'open', name: result.name, files: result.files, ids, skipped: result.skipped, kit })
       result.files.forEach((f, i) => {
         decodeFile(f.file).then(
           (audio) => dispatch({ type: 'decoded', id: ids[i], audio }),
@@ -125,9 +146,7 @@ export default function App() {
         {project && (
           <>
             <span className="font-display text-lg italic text-ink-soft">{project.name}</span>
-            <span className="font-mono text-xs text-moss" title={project.kit.interface}>
-              kit: {project.kit.name}
-            </span>
+            <KitPicker value={project.kit} onChange={chooseKit} compact />
             <span className={`font-mono text-xs ${rates.size > 1 ? 'text-amber' : 'text-muted'}`}>{summary}</span>
             <button
               type="button"
@@ -162,7 +181,7 @@ export default function App() {
             />
           )
         ) : (
-          <DropZone onOpen={open} dragging={dragging} />
+          <DropZone onOpen={open} dragging={dragging} kit={kit} onKit={chooseKit} />
         )}
       </main>
 

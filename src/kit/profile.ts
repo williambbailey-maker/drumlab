@@ -50,13 +50,13 @@ export const delayMs = (metres: number): number => (metres / SPEED_OF_SOUND) * 1
 const inches = (n: number) => n * 0.0254
 
 /**
- * The user's attic kit: 8 inputs into a Focusrite, no cymbals but hats,
- * one dampened floor tom with no close mic, dry insulated room.
- * Distances are estimates from the written description; refine from photos.
+ * September 2026 setup: 8 inputs into a Focusrite in a small insulated attic,
+ * no cymbals but hats, one dampened floor tom with no close mic.
+ * Distances are estimates from the description and photos.
  */
-export const ATTIC_KIT: KitProfile = {
-  id: 'attic-kit',
-  name: 'Attic kit',
+export const SEPTEMBER_2026_KIT: KitProfile = {
+  id: 'september-2026-drum-config',
+  name: 'September 2026 drum config',
   interface: 'Focusrite 8-in',
   room: {
     description:
@@ -157,7 +157,29 @@ export const ATTIC_KIT: KitProfile = {
   ],
 }
 
-export const DEFAULT_KIT: KitProfile = ATTIC_KIT
+/** Filename guessing only; no expectations attached. */
+export const NO_KIT: KitProfile = {
+  id: 'none',
+  name: 'No profile',
+  interface: '',
+  room: { description: '', hazards: [] },
+  inputs: [],
+  alignmentReference: ['oh_l', 'oh_r'],
+  polarityPairs: [
+    ['snare_top', 'snare_bottom'],
+    ['kick_in', 'kick_out'],
+    ['oh_l', 'oh_r'],
+  ],
+  mainsHz: null,
+  notes: [],
+}
+
+export const KIT_PROFILES: readonly KitProfile[] = [SEPTEMBER_2026_KIT, NO_KIT]
+export const DEFAULT_KIT: KitProfile = SEPTEMBER_2026_KIT
+
+export function kitById(id: string | undefined): KitProfile {
+  return KIT_PROFILES.find((k) => k.id === id) ?? DEFAULT_KIT
+}
 
 /** Role for an interface input number, or null if the profile has no such input. */
 export function roleForInput(profile: KitProfile, input: number): StemRole | null {

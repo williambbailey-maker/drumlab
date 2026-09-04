@@ -1,5 +1,5 @@
 import { assignRoles, type StemRole } from './lib/roles'
-import { DEFAULT_KIT, inputNumberFromName, roleForInput, type KitProfile } from './kit/profile'
+import { inputNumberFromName, roleForInput, type KitProfile } from './kit/profile'
 import type { IngestFile } from './lib/ingest'
 import type { TrackAudio } from './lib/decoder'
 
@@ -27,7 +27,8 @@ export interface Project {
 }
 
 export type Action =
-  | { type: 'open'; name: string; files: IngestFile[]; ids: string[]; skipped: number }
+  | { type: 'open'; name: string; files: IngestFile[]; ids: string[]; skipped: number; kit: KitProfile }
+  | { type: 'set-kit'; kit: KitProfile }
   | { type: 'decoded'; id: string; audio: TrackAudio }
   | { type: 'decode-error'; id: string; error: string }
   | { type: 'set-role'; id: string; role: StemRole }
@@ -43,6 +44,14 @@ export function newId(): string {
 
 function update(tracks: Track[], id: string, patch: (t: Track) => Track): Track[] {
   return tracks.map((t) => (t.id === id ? patch(t) : t))
+}
+
+function rolesFor(kit: KitProfile, filenames: string[]) {
+  const byInput = (name: string) => {
+    const n = inputNumberFromName(name)
+    return n === null ? null : roleForInput(kit, n)
+  }
+  return assignRoles(filenames, byInput)
 }
 
 /** Roles for the two halves of a stereo file, given the role guessed for the whole file. */
@@ -78,14 +87,10 @@ function splitStereo(track: Track, audio: TrackAudio): Track[] {
 export function reducer(state: Project | null, action: Action): Project | null {
   switch (action.type) {
     case 'open': {
-      const kit = DEFAULT_KIT
-      const byInput = (name: string) => {
-        const n = inputNumberFromName(name)
-        return n === null ? null : roleForInput(kit, n)
-      }
-      const roles = assignRoles(
+      const kit = action.kit
+      const roles = rolesFor(
+        kit,
         action.files.map((f) => f.file.name),
-        byInput,
       )
       return {
         name: action.name,
@@ -120,6 +125,20 @@ export function reducer(state: Project | null, action: Action): Project | null {
     }
     case 'decode-error':
       return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, status: 'error', error: action.error })) }
+    case 'set-kit': {
+      // Re-guess every role the user has not set by hand, under the new profile.
+      const roles = rolesFor(
+        action.kit,
+        state.tracks.map((t) => t.name),
+      )
+      return {
+        ...state,
+        kit: action.kit,
+        tracks: state.tracks.map((t, i) =>
+          t.roleSource === 'user' ? t : { ...t, role: roles[i].role, roleSource: roles[i].source },
+        ),
+      }
+    }
     case 'set-role':
       return { ...state, tracks: update(state.tracks, action.id, (t) => ({ ...t, role: action.role, roleSource: 'user' })) }
     case 'toggle-mute':

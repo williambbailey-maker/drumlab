@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { reducer, splitRole, type Project } from './state'
 import type { TrackAudio } from './lib/decoder'
+import { NO_KIT, SEPTEMBER_2026_KIT } from './kit/profile'
 
 const file = (name: string) => ({ file: { name } as File, path: name })
 
@@ -17,8 +18,8 @@ function audio(channels: number): TrackAudio {
   }
 }
 
-function open(names: string[]): Project {
-  const p = reducer(null, { type: 'open', name: 'Take', files: names.map(file), ids: names.map((n) => `id-${n}`), skipped: 0 })
+function open(names: string[], kit = SEPTEMBER_2026_KIT): Project {
+  const p = reducer(null, { type: 'open', name: 'Take', files: names.map(file), ids: names.map((n) => `id-${n}`), skipped: 0, kit })
   if (!p) throw new Error('no project')
   return p
 }
@@ -36,6 +37,24 @@ describe('reducer open', () => {
       ['oh_l', 'kit'],
       ['kick_in', 'kit'],
     ])
+  })
+
+  it('with no profile, bare DAW names stay unrecognised', () => {
+    const p = open(['Audio 1.wav', 'kik in.wav'], NO_KIT)
+    expect(p.tracks.map((t) => t.role)).toEqual(['other', 'kick_in'])
+  })
+
+  it('switching profile re-guesses roles but keeps user choices', () => {
+    let p = open(['Audio 1.wav', 'Audio 8.wav'])
+    p = reducer(p, { type: 'set-role', id: 'id-Audio 8.wav', role: 'hat' })!
+    p = reducer(p, { type: 'set-kit', kit: NO_KIT })!
+    expect(p.kit.id).toBe('none')
+    expect(p.tracks.map((t) => [t.role, t.roleSource])).toEqual([
+      ['other', 'guessed'],
+      ['hat', 'user'],
+    ])
+    p = reducer(p, { type: 'set-kit', kit: SEPTEMBER_2026_KIT })!
+    expect(p.tracks[0].role).toBe('oh_l')
   })
 })
 

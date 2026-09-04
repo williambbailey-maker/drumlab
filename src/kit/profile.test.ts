@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATTIC_KIT, delayMs, inputNumberFromName, roleForInput } from './profile'
+import { SEPTEMBER_2026_KIT, delayMs, inputNumberFromName, kitById, roleForInput } from './profile'
 
 describe('inputNumberFromName', () => {
   it('reads generic DAW track names', () => {
@@ -17,17 +17,24 @@ describe('inputNumberFromName', () => {
   })
 })
 
-describe('ATTIC_KIT', () => {
+describe('kitById', () => {
+  it('falls back to the default for unknown ids', () => {
+    expect(kitById('nope').id).toBe('september-2026-drum-config')
+    expect(kitById('none').name).toBe('No profile')
+  })
+})
+
+describe('SEPTEMBER_2026_KIT', () => {
   it('maps all eight inputs to distinct roles', () => {
-    const roles = ATTIC_KIT.inputs.map((i) => i.role)
+    const roles = SEPTEMBER_2026_KIT.inputs.map((i) => i.role)
     expect(roles).toHaveLength(8)
     expect(new Set(roles).size).toBe(8)
-    expect(roleForInput(ATTIC_KIT, 7)).toBe('snare_top')
-    expect(roleForInput(ATTIC_KIT, 9)).toBeNull()
+    expect(roleForInput(SEPTEMBER_2026_KIT, 7)).toBe('snare_top')
+    expect(roleForInput(SEPTEMBER_2026_KIT, 9)).toBeNull()
   })
   it('puts the overheads about 2 ms behind the snare top', () => {
-    const oh = ATTIC_KIT.inputs.find((i) => i.role === 'oh_l')!
-    const top = ATTIC_KIT.inputs.find((i) => i.role === 'snare_top')!
+    const oh = SEPTEMBER_2026_KIT.inputs.find((i) => i.role === 'oh_l')!
+    const top = SEPTEMBER_2026_KIT.inputs.find((i) => i.role === 'snare_top')!
     const ms = delayMs(oh.distanceToSnareM! - top.distanceToSnareM!)
     expect(ms).toBeGreaterThan(1.5)
     expect(ms).toBeLessThan(2.5)

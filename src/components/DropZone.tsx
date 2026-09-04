@@ -1,12 +1,17 @@
 import { useRef, type ChangeEvent } from 'react'
 import { ingestFileList, type IngestResult } from '../lib/ingest'
+import { roleLabel } from '../lib/roles'
+import type { KitProfile } from '../kit/profile'
+import { KitPicker } from './KitPicker'
 
 interface Props {
   onOpen: (result: IngestResult) => void
   dragging: boolean
+  kit: KitProfile
+  onKit: (kit: KitProfile) => void
 }
 
-export function DropZone({ onOpen, dragging }: Props) {
+export function DropZone({ onOpen, dragging, kit, onKit }: Props) {
   const folderInput = useRef<HTMLInputElement>(null)
   const filesInput = useRef<HTMLInputElement>(null)
 
@@ -44,6 +49,32 @@ export function DropZone({ onOpen, dragging }: Props) {
           </button>
         </div>
         <p className="mt-6 font-mono text-xs text-muted">WAV · PCM 16/24/32 or float · any sample rate</p>
+
+        <div className="mt-10 border-t border-rule pt-6">
+          <KitPicker value={kit} onChange={onKit} />
+          {kit.inputs.length > 0 ? (
+            <div className="mx-auto mt-4 max-w-md overflow-x-auto">
+              <table className="w-full text-left font-mono text-[11px] text-ink-soft">
+                <tbody>
+                  {kit.inputs.map((i) => (
+                    <tr key={i.input} className="border-t border-rule-soft">
+                      <td className="py-1 pr-3 text-muted">{i.input}</td>
+                      <td className="py-1 pr-3 font-sans text-xs font-medium text-ink">{roleLabel(i.role)}</td>
+                      <td className="py-1 pr-3">{i.mic}</td>
+                      <td className="py-1 text-right text-muted">lvl {i.level}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-3 text-xs text-muted">
+                {kit.interface}
+                {kit.mainsHz ? ` · ${kit.mainsHz} Hz mains` : ''} · applies to tracks the filename alone can't place
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-muted">Roles are guessed from filenames only.</p>
+          )}
+        </div>
         <input
           ref={folderInput}
           type="file"
